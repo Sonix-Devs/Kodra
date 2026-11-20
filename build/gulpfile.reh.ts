@@ -42,6 +42,7 @@ const REPO_ROOT = path.dirname(import.meta.dirname);
 const commit = getVersion(REPO_ROOT);
 const BUILD_ROOT = path.dirname(REPO_ROOT);
 const REMOTE_FOLDER = path.join(REPO_ROOT, 'remote');
+const hasDefaultChatAgent = Object.prototype.hasOwnProperty.call(product, 'defaultChatAgent');
 
 // Targets
 
@@ -287,8 +288,8 @@ function packageTask(type: string, platform: string, arch: string, sourceFolderN
 				// and they'd just increase the download without being used
 				const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, extensionPath)).toString());
 				return !isUIExtension(manifest);
-			}).map((extensionPath) => path.basename(path.dirname(extensionPath)))
-			.filter(name => name !== 'vscode-api-tests' && name !== 'vscode-test-resolver'); // Do not ship the test extensions
+		}).map((extensionPath) => path.basename(path.dirname(extensionPath)))
+		.filter(name => (hasDefaultChatAgent || name !== 'copilot') && name !== 'vscode-api-tests' && name !== 'vscode-test-resolver'); // Omit disabled Copilot and test extensions
 		const builtInExtensions: Array<{ name: string; platforms?: string[]; clientOnly?: boolean }> = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'product.json'), 'utf8')).builtInExtensions;
 		const marketplaceExtensions = builtInExtensions
 			.filter(entry => !entry.platforms || new Set(entry.platforms).has(platform))
@@ -545,8 +546,10 @@ function prepareCopilotRipgrepShimTaskREH(platform: string, arch: string, destin
 				task.task(`node-${platform}-${arch}`) as task.Task,
 				util.rimraf(path.join(BUILD_ROOT, destinationFolderName)),
 				packageTask(type, platform, arch, sourceFolderName, destinationFolderName),
-				prepareCopilotRipgrepShimTaskREH(platform, arch, destinationFolderName)
 			];
+			if (hasDefaultChatAgent) {
+				packageTasks.push(prepareCopilotRipgrepShimTaskREH(platform, arch, destinationFolderName));
+			}
 
 			if (platform === 'win32') {
 				packageTasks.push(patchWin32DependenciesTask(destinationFolderName));
@@ -560,7 +563,7 @@ function prepareCopilotRipgrepShimTaskREH(platform: string, arch: string, destin
 				compileApiProposalNamesTask,
 				cleanExtensionsBuildTask,
 				compileNonNativeExtensionsBuildTask,
-				compileCopilotExtensionBuildTask,
+				...(hasDefaultChatAgent ? [compileCopilotExtensionBuildTask] : []),
 				compileExtensionMediaBuildTask,
 				writeISODate('out-build'),
 				minified ? esbuildBundleMinTask : esbuildBundleTask,

@@ -2,7 +2,7 @@
 
 Kodra is an Android-focused code editor based on **Code - OSS**. The project reuses the shared workbench and browser/server code, with a planned native Android shell and a separately built Android/bionic runtime.
 
-> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow is published in [PR #1](https://github.com/unalivin/vscode/pull/1) on the current source repository. Its first run built and verified both packages but failed at artifact upload because the output paths were outside the workspace; the workflow now stages packages inside the workspace and awaits a rerun. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
+> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 44832155101](https://github.com/unalivin/vscode/actions/runs/44832155101), building, verifying, and uploading both packages. The remaining Stage 1 review does not change the platform boundary: these are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
 
 Planned canonical repository: <https://github.com/unalivin/kodra> (not currently resolvable in GitHub; this source tree currently lives at <https://github.com/unalivin/vscode>).
 
@@ -17,12 +17,12 @@ See [`PORTING_NOTES.md`](PORTING_NOTES.md) for the staged plan, architecture, au
 
 ## Linux ARM64 REH artifacts
 
-The workflow file in this branch is designed to build and upload two artifacts after it is published and run:
+[Successful Actions run 44832155101](https://github.com/unalivin/vscode/actions/runs/44832155101) uploaded two 14-day artifacts:
 
-- `vscode-reh-linux-arm64` — the Linux ARM64 remote extension host server.
-- `vscode-reh-web-linux-arm64` — the browser workbench/web server assets.
+- `vscode-reh-linux-arm64` — the Linux ARM64 remote extension host server (184,699,122 bytes).
+- `vscode-reh-web-linux-arm64` — the browser workbench/web server assets (217,723,110 bytes).
 
-No artifacts exist yet. Both packages target Linux/glibc and are build evidence only; do not run them as Android/bionic binaries.
+The workflow checks the packaged Node binary's AArch64 ELF header and Kodra product identity before upload. Both packages target Linux/glibc and are build evidence only; do not run them as Android/bionic binaries.
 
 ## Upstream and license
 

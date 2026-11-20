@@ -70,11 +70,18 @@ jobs:
             node -e 'const p = require(process.argv[1]); if (p.applicationName !== "kodra") process.exit(1); console.log(`${p.nameLong} ${p.version}: ${p.applicationName}`)' "$package/product.json"
           done
 
+      - name: Stage verified packages for artifact upload
+        run: |
+          set -euo pipefail
+          mkdir -p .build/kodra-artifacts
+          mv ../vscode-reh-linux-arm64 .build/kodra-artifacts/vscode-reh-linux-arm64
+          mv ../vscode-reh-web-linux-arm64 .build/kodra-artifacts/vscode-reh-web-linux-arm64
+
       - name: Upload Linux ARM64 REH artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vscode-reh-linux-arm64
-          path: ../vscode-reh-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-linux-arm64
           if-no-files-found: error
           retention-days: 14
 
@@ -82,6 +89,6 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vscode-reh-web-linux-arm64
-          path: ../vscode-reh-web-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-web-linux-arm64
           if-no-files-found: error
           retention-days: 14

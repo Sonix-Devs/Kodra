@@ -2,7 +2,7 @@
 
 Kodra is an Android-focused code editor based on **Code - OSS**. The project reuses the shared workbench and browser/server code, with a planned native Android shell and a separately built Android/bionic runtime.
 
-> **Porting status:** Stage 0 is complete and Stage 1 is in progress. This branch contains a GitHub Actions workflow to build upstream **Linux ARM64** REH and REH-web packages, but it has not been published to the current GitHub remote or run yet. Once published and run successfully, it will upload artifacts for validation. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
+> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow is published in [PR #1](https://github.com/unalivin/vscode/pull/1) on the current source repository. Its first run built and verified both packages but failed at artifact upload because the output paths were outside the workspace; the workflow now stages packages inside the workspace and awaits a rerun. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
 
 Planned canonical repository: <https://github.com/unalivin/kodra> (not currently resolvable in GitHub; this source tree currently lives at <https://github.com/unalivin/vscode>).
 

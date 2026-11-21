@@ -245,7 +245,7 @@ export function createWorkbenchContentSecurityPolicy(scriptNonce: string, nlsBas
 		'media-src \'self\';',
 		`script-src 'self' 'unsafe-eval' ${nlsBaseUrl ?? ''} blob: 'nonce-${scriptNonce}' '${webWorkerExtensionHostIframeScriptSHA}' 'sha256-/r7rqQ+yrxt57sxLuQ6AMYcy/lUpvAIzHjIJt/OeLWU=' ${useTestResolver ? '' : `http://${remoteAuthority}`};`,  // the sha is the same as in src/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html
 		'child-src \'self\';',
-			`frame-src 'self' ${webviewFrameSource} data:;`,
+		`frame-src 'self' ${webviewFrameSource} data:;`,
 		'worker-src \'self\' data: blob:;',
 		'style-src \'self\' \'unsafe-inline\';',
 		'connect-src \'self\' ws: wss: https:;',

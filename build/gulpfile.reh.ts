@@ -327,6 +327,14 @@ function packageTask(type: string, platform: string, arch: string, sourceFolderN
 				json.nlsMetadataHash = computeNLSMetadataHash(path.join(REPO_ROOT, sourceFolderName), commit);
 				json.date = readISODate(sourceFolderName);
 				json.version = version;
+				// Tunnel fields gate native CLI behavior. Preserve desktop packaging
+				// metadata in source product.json, but don't advertise tunnel CLI
+				// functionality in a server product without its config.
+				if (!json.tunnelApplicationConfig) {
+					delete json.tunnelApplicationName;
+					delete json.win32TunnelMutex;
+					delete json.win32TunnelServiceMutex;
+				}
 				// Stamp agentSdks from the per-platform results file produced
 				// by `build/agent-sdk/produce.ts`. REH-only: REH-web is
 				// browser-served and the agent host is node-only, so the

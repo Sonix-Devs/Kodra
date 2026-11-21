@@ -67,7 +67,18 @@ jobs:
             test -s "$package/node"
             file "$package/node"
             readelf -h "$package/node" | grep -E 'Class:|Machine:.*AArch64'
-            node -e 'const p = require(process.argv[1]); if (p.applicationName !== "kodra") process.exit(1); console.log(`${p.nameLong} ${p.version}: ${p.applicationName}`)' "$package/product.json"
+            node -e '
+              const p = require(process.argv[1]);
+              if (p.applicationName !== "kodra") throw new Error(`Unexpected product: ${p.applicationName}`);
+              for (const key of ["tunnelApplicationName", "tunnelApplicationConfig", "win32TunnelMutex", "win32TunnelServiceMutex"]) {
+                if (Object.prototype.hasOwnProperty.call(p, key)) throw new Error(`Unexpected tunnel product metadata: ${key}`);
+              }
+              console.log(`${p.nameLong} ${p.version}: ${p.applicationName}; tunnel metadata omitted`);
+            ' "$package/product.json"
+            test ! -e "$package/bin/kodra-tunnel"
+            test ! -e "$package/extensions/copilot"
+            echo "Packaged bin files for $package:"
+            find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done
 
       - name: Stage verified packages for artifact upload

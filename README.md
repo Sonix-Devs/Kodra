@@ -2,7 +2,7 @@
 
 Kodra is an Android-focused code editor based on **Code - OSS**. The project reuses the shared workbench and browser/server code, with a planned native Android shell and a separately built Android/bionic runtime.
 
-> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 44833150751](https://github.com/unalivin/vscode/actions/runs/44833150751), building, verifying, and uploading both packages. A follow-up package-content and service-path review is still in progress. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
+> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 44999180455](https://github.com/unalivin/vscode/actions/runs/44999180455), building, verifying, and uploading both packages, including the tunnel-metadata/CLI and Copilot-extension absence assertions. A follow-up package-content and service-path review is still in progress. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
 
 Planned canonical repository: <https://github.com/unalivin/kodra> (not currently resolvable in GitHub; this source tree currently lives at <https://github.com/unalivin/vscode>).
 
@@ -18,12 +18,12 @@ See [`PORTING_NOTES.md`](PORTING_NOTES.md) for the staged plan, architecture, au
 
 ## Linux ARM64 REH artifacts
 
-[Successful Actions run 44833150751](https://github.com/unalivin/vscode/actions/runs/44833150751) uploaded two 14-day artifacts:
+[Successful Actions run 44999180455](https://github.com/unalivin/vscode/actions/runs/44999180455) uploaded two 14-day artifacts:
 
-- `vscode-reh-linux-arm64` — the Linux ARM64 remote extension host server (184,699,134 bytes).
-- `vscode-reh-web-linux-arm64` — the browser workbench/web server assets (217,723,155 bytes).
+- `vscode-reh-linux-arm64` — the Linux ARM64 remote extension host server (186,432,884 bytes).
+- `vscode-reh-web-linux-arm64` — the browser workbench/web server assets (219,458,326 bytes).
 
-That run checked the packaged Node binary's AArch64 ELF header and Kodra product identity before upload. A pending workflow change asserts that tunnel metadata, the tunnel CLI, and the built-in Copilot extension are absent; those assertions have not run yet, and local archive extraction remains blocked by the sandbox's download-host allowlist. Both packages target Linux/glibc and are build evidence only; do not run them as Android/bionic binaries.
+That run checked the packaged Node binary's AArch64 ELF header and Kodra product identity, and asserted that the tunnel product metadata keys, `bin/kodra-tunnel`, and `extensions/copilot` are absent from both packages, before upload. Local archive extraction remains blocked by the sandbox's download-host allowlist, so the checks are those of the workflow, not of a locally unpacked copy. Both packages target Linux/glibc and are build evidence only; do not run them as Android/bionic binaries.
 
 ## Upstream and license
 

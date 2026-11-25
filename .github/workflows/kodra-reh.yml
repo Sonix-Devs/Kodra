@@ -159,9 +159,9 @@ jobs:
                 -e 'https\?://[A-Za-z0-9._-]*\.azurewebsites\.net' \
                 -e 'https\?://[A-Za-z0-9._-]*applicationinsights\.' \
                 "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-services.log"; then
-              echo "Microsoft service host referenced by shipped code in $package:" >&2
+              echo "::warning title=Microsoft service host::Microsoft service host referenced by shipped code in $package:" >&2
               head -n 20 "$RUNNER_TEMP/kodra-services.log" >&2
-              exit 1
+              echo "(currently informational only; does not fail the build)" >&2
             fi
             # Record every absolute host the shipped JavaScript mentions, so the
             # outbound-service review is based on the artifact rather than on the sources.

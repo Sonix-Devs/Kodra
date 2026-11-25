@@ -162,6 +162,7 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "$(wc -l < "$RUNNER_TEMP/kodra-hosts.log") distinct absolute hosts referenced in $package:" >&2
             head -n 20 "$RUNNER_TEMP/kodra-hosts.log" >&2
+            cp "$RUNNER_TEMP/kodra-hosts.log" "$RUNNER_TEMP/kodra-hosts-$(basename "$package").log"
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done
@@ -183,6 +184,14 @@ jobs:
               echo "::error title=Package verification::${escaped}"
             done
           fi
+
+      - name: Upload host inventory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kodra-host-inventory
+          path: ${{ runner.temp }}/kodra-hosts-*.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Stage verified packages for artifact upload
         run: |

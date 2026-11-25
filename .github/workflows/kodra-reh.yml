@@ -105,6 +105,8 @@ jobs:
             ' "$package/product.json"
             test ! -e "$package/bin/kodra-tunnel"
             test ! -e "$package/extensions/copilot"
+            test -x "$package/bin/kodra-server"
+            head -n 1 "$package/bin/kodra-server" | grep -E '^#!/usr/bin/env sh$'
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done
@@ -169,6 +171,13 @@ jobs:
           for package in .build/kodra-artifacts/vscode-reh-linux-arm64 .build/kodra-artifacts/vscode-reh-web-linux-arm64; do
             file "$package/node"
             readelf -h "$package/node" | grep -E 'Machine:.*AArch64'
+            # Artifact transport does not preserve the executable bit that the
+            # build job asserts; restore it for the launcher scripts the
+            # packages are expected to run.
+            for script in "$package/bin/kodra-server" "$package/bin"/remote-cli/* "$package/bin"/helpers/*.sh; do
+              head -n 1 "$script" | grep -q '^#!' && chmod +x "$script"
+            done
+            test -x "$package/bin/kodra-server"
           done
 
       - name: Run the packaged REH server and verify runtime behavior

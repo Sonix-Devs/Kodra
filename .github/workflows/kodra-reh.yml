@@ -164,9 +164,9 @@ jobs:
             fi
             # Record every absolute host the shipped JavaScript mentions, so the
             # outbound-service review is based on the artifact rather than on the sources.
-            grep -rhoE --binary-files=without-match \
+            (grep -rhoE --binary-files=without-match \
                 --include='*.js' --include='*.mjs' --include='*.cjs' \
-                'https?://[A-Za-z0-9.-]+' "$package/out" "$package/extensions" \
+                'https?://[A-Za-z0-9.-]+' "$package/out" "$package/extensions" || true) \
               | sed -E 's#^https?://##' | tr '[:upper:]' '[:lower:]' | sort | uniq -c | sort -rn \
               > "$RUNNER_TEMP/kodra-hosts.log"
             echo "### Absolute hosts referenced by $(basename "$package")" >> "$GITHUB_STEP_SUMMARY"

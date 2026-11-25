@@ -15,6 +15,9 @@
  *   address and picks a port from `--port 0`;
  * - the loopback bind is not reachable through the runner's non-internal interface;
  * - with a connection token file, unauthenticated requests are rejected and the token grants access;
+ * - the packaged `product.json` gates off every Microsoft-hosted service (telemetry, the
+ *   extension gallery, agent-SDK CDN downloads and CLI downloads), so the bundled telemetry
+ *   SDK inside extension bundles stays inert;
  * - the REH-web package serves the Kodra workbench HTML and the web manifest from the package,
  *   and that HTML references no Microsoft-hosted origin;
  * - the REH package serves no workbench HTML at all, and reports its commit from `/version`.
@@ -68,6 +71,8 @@ async function main(serverRoot: string | undefined): Promise<void> {
 		}
 	}
 
+	verifyProductGating(product);
+
 	const hasWebClient = fs.existsSync(path.join(root, 'out', 'vs', 'code', 'browser', 'workbench', 'workbench.html'));
 	console.log(`Package ${path.basename(root)} ${product.version ?? ''}: ${hasWebClient ? 'ships the web client' : 'has no web client'}.`);
 
@@ -116,6 +121,26 @@ async function main(serverRoot: string | undefined): Promise<void> {
 		await stopProcess(child);
 		fs.rmSync(temporaryRoot, { recursive: true, force: true });
 	}
+}
+
+// Some upstream code paths are gated by `product.json` rather than by source, so the
+// package can ship inert references to Microsoft-hosted services (for example the
+// Application Insights default endpoint inside `@vscode/extension-telemetry`, which is
+// bundled by several built-in extensions). This asserts that the gating is really in
+// place in the artifact we just built.
+function verifyProductGating(product: Record<string, unknown>): void {
+	if (product.enableTelemetry !== false) {
+		throw new Error(`Packaged product.json has enableTelemetry=${JSON.stringify(product.enableTelemetry)}, expected false.`);
+	}
+	for (const gatedKey of ['extensionsGallery', 'agentSdks', 'telemetryConnectionString', 'aiConfig']) {
+		if (product[gatedKey] !== undefined) {
+			throw new Error(`Packaged product.json still declares "${gatedKey}", which would enable a Microsoft-hosted service.`);
+		}
+	}
+	if (product.cliDownloadUrlBase !== '') {
+		throw new Error(`Packaged product.json has cliDownloadUrlBase=${JSON.stringify(product.cliDownloadUrlBase)}, expected an empty download base.`);
+	}
+	console.log('Packaged product.json disables telemetry, the extension gallery, agent-SDK and CLI downloads.');
 }
 
 function waitForReady(child: ChildProcess): Promise<Bound> {

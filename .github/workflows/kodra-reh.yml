@@ -107,17 +107,32 @@ jobs:
             test ! -e "$package/extensions/copilot"
             test -x "$package/bin/kodra-server"
             head -n 1 "$package/bin/kodra-server" | grep -E '^#!/usr/bin/env sh$'
-            # No shipped server/browser code may reference a Microsoft-hosted
-            # origin. Source-map and comment-only hits are covered too: Kodra
-            # publishes no source maps, so any reference is a product defect.
-            if grep -rIl --binary-files=without-match \
+            # No shipped code may reference a Microsoft-hosted download,
+            # marketplace or telemetry endpoint. Kodra publishes no source maps,
+            # so even a comment-only reference is a product defect here.
+            if grep -rIn --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
                 -e 'update\.code\.visualstudio\.com' \
-                -e 'main\.vscode-cdn\.net' \
-                -e 'marketplace\.visualstudio\.com' \
+                -e 'vscode-cdn\.net' \
                 -e 'dc\.services\.visualstudio\.com' \
-                "$package/out" "$package/extensions"; then
-              echo "Microsoft-hosted origin referenced by shipped code in $package" >&2
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-origins.log"; then
+              echo "Microsoft-hosted endpoint referenced by shipped code in $package:" >&2
+              head -n 20 "$RUNNER_TEMP/kodra-origins.log" >&2
               exit 1
+            fi
+            # A Marketplace reference is only acceptable as a documentation
+            # hyperlink (`](https://marketplace...)`), never as a fetch target.
+            if grep -rIn --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'marketplace\.visualstudio\.com' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-marketplace.log"; then
+              if grep -vF '](https://marketplace.visualstudio.com' "$RUNNER_TEMP/kodra-marketplace.log" \
+                  | grep -qF 'marketplace.visualstudio.com'; then
+                echo "Non-hyperlink Marketplace reference in shipped code of $package:" >&2
+                grep -vF '](https://marketplace.visualstudio.com' "$RUNNER_TEMP/kodra-marketplace.log" | head -n 20 >&2
+                exit 1
+              fi
+              echo "$(wc -l < "$RUNNER_TEMP/kodra-marketplace.log") Marketplace references in $package are documentation hyperlinks."
             fi
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort

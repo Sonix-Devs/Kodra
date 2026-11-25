@@ -91,6 +91,7 @@ jobs:
       - name: Verify Linux ARM64 package contents
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/kodra-verify.log") 2>&1
           for package in ../vscode-reh-linux-arm64 ../vscode-reh-web-linux-arm64; do
             test -s "$package/node"
             file "$package/node"
@@ -137,6 +138,24 @@ jobs:
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done
+
+      - name: Summarize package verification failure
+        if: failure()
+        run: |
+          log_file="$RUNNER_TEMP/kodra-verify.log"
+          if test -s "$log_file"; then
+            {
+              echo '### Package verification log tail'
+              echo '```text'
+              tail -n 40 "$log_file"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -n 40 "$log_file" | while IFS= read -r line; do
+              escaped="${line//'%'/'%25'}"
+              escaped="${escaped//$'\r'/'%0D'}"
+              echo "::error title=Package verification::${escaped}"
+            done
+          fi
 
       - name: Stage verified packages for artifact upload
         run: |

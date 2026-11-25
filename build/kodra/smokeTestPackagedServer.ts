@@ -91,6 +91,9 @@ async function main(serverRoot: string | undefined): Promise<void> {
 		cwd: root,
 		env: { ...process.env, VSCODE_DEV: undefined },
 		stdio: ['ignore', 'pipe', 'pipe'],
+		// The launcher is a shell script that execs `node`; a dedicated process
+		// group lets us stop the whole tree instead of leaking the server.
+		detached: process.platform !== 'win32',
 	});
 
 	try {
@@ -157,7 +160,8 @@ function waitForReady(child: ChildProcess): Promise<Bound> {
 }
 
 async function request(port: number, pathname: string, headers: http.OutgoingHttpHeaders = {}): Promise<HttpResult> {
-	return new Promise((resolve, reject) => {
+	console.log(`-> GET ${pathname}`);
+	const result = await new Promise<HttpResult>((resolve, reject) => {
 		const req = http.request({
 			host: '127.0.0.1',
 			port,
@@ -180,6 +184,8 @@ async function request(port: number, pathname: string, headers: http.OutgoingHtt
 		req.on('error', reject);
 		req.end();
 	});
+	console.log(`<- ${result.status} ${pathname}`);
+	return result;
 }
 
 function verifyBoundAddress(bound: Bound): void {
@@ -321,20 +327,44 @@ async function verifyNoWebClient(port: number): Promise<void> {
 }
 
 async function stopProcess(child: ChildProcess): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) {
-		return;
+	if (child.exitCode === null && child.signalCode === null) {
+		const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+		killTree(child, 'SIGTERM');
+		await Promise.race([exited, delay(5_000)]);
+		if (child.exitCode === null && child.signalCode === null) {
+			killTree(child, 'SIGKILL');
+			await Promise.race([exited, delay(5_000)]);
+		}
 	}
 
-	const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
-	child.kill();
-	await Promise.race([exited, delay(5_000)]);
-	if (child.exitCode === null && child.signalCode === null) {
-		child.kill('SIGKILL');
-		await exited;
-	}
+	// The server's stdio pipes are inherited by its children; release them so this
+	// process can exit once the checks are done.
+	child.stdout?.destroy();
+	child.stderr?.destroy();
 }
 
-main(process.argv[2]).catch(error => {
+function killTree(child: ChildProcess, signal: NodeJS.Signals): void {
+	if (process.platform !== 'win32' && child.pid) {
+		try {
+			process.kill(-child.pid, signal);
+			return;
+		} catch {
+			// fall back to the direct child
+		}
+	}
+	child.kill(signal);
+}
+
+// A hung server must fail the job rather than run until the workflow timeout.
+const overallTimeoutMs = 5 * 60_000;
+setTimeout(() => {
+	console.error(`::error title=Packaged server smoke test::Timed out after ${overallTimeoutMs}ms.`);
+	process.exit(1);
+}, overallTimeoutMs).unref();
+
+main(process.argv[2]).then(() => {
+	process.exit(0);
+}).catch(error => {
 	console.error(error);
 
 	// The server output is part of the error message; collapse it so the first

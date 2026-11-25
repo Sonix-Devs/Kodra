@@ -170,9 +170,28 @@ jobs:
       - name: Run the packaged REH server and verify runtime behavior
         run: |
           set -euo pipefail
-          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-linux-arm64
+          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-linux-arm64 2>&1 | tee "$RUNNER_TEMP/kodra-reh.log"
 
       - name: Run the packaged REH-web server and verify runtime behavior
         run: |
           set -euo pipefail
-          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-web-linux-arm64
+          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-web-linux-arm64 2>&1 | tee "$RUNNER_TEMP/kodra-reh-web.log"
+
+      - name: Summarize smoke failure
+        if: failure()
+        run: |
+          for log_file in "$RUNNER_TEMP/kodra-reh.log" "$RUNNER_TEMP/kodra-reh-web.log"; do
+            if test -s "$log_file"; then
+              {
+                echo "### $(basename "$log_file") tail"
+                echo '```text'
+                tail -n 40 "$log_file"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              tail -n 40 "$log_file" | while IFS= read -r line; do
+                escaped="${line//'%'/'%25'}"
+                escaped="${escaped//$'\r'/'%0D'}"
+                echo "::error title=Packaged server smoke test::${escaped}"
+              done
+            fi
+          done

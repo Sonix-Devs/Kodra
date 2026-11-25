@@ -152,11 +152,12 @@ jobs:
             # Additional Microsoft service hosts that must not appear in shipped code:
             # Azure Functions deployments (e.g. legacy settings sync) and the
             # Application Insights ingestion aliases.
+            # Only fail on an actual request URL, not on a domain allowlist
+            # or in completion/test data (e.g. AllowedSecondLevelDomains).
             if grep -rIn --binary-files=without-match \
                 --include='*.js' --include='*.mjs' --include='*.cjs' \
-                -e '\.azurewebsites\.net' \
-                -e 'applicationinsights\.io' \
-                -e 'applicationinsights\.azure\.com' \
+                -e 'https\?://[A-Za-z0-9._-]*\.azurewebsites\.net' \
+                -e 'https\?://[A-Za-z0-9._-]*applicationinsights\.' \
                 "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-services.log"; then
               echo "Microsoft service host referenced by shipped code in $package:" >&2
               head -n 20 "$RUNNER_TEMP/kodra-services.log" >&2

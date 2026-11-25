@@ -245,19 +245,25 @@ async function tokenCookie(port: number): Promise<string> {
 	return cookie;
 }
 
+// A route every package serves (REH and REH-web) and that requires the connection token.
+const authenticatedResourcePath = '/vscode-remote-resource?path=/nonexistent-kodra-smoke-test';
+
 async function verifyTokenEnforcement(port: number): Promise<void> {
-	const unauthenticated = await request(port, '/');
+	const unauthenticated = await request(port, authenticatedResourcePath);
 	if (unauthenticated.status !== 403) {
 		throw new Error(`Expected 403 for an unauthenticated request, received ${unauthenticated.status}.`);
 	}
 
-	const wrongToken = await request(port, '/?tkn=not-the-token');
+	const wrongToken = await request(port, `${authenticatedResourcePath}&tkn=not-the-token`);
 	if (wrongToken.status !== 403) {
 		throw new Error(`Expected 403 for a wrong connection token, received ${wrongToken.status}.`);
 	}
 
-	await tokenCookie(port);
-	console.log('Unauthenticated and wrongly authenticated requests rejected with 403; the token issued a cookie.');
+	const explicitToken = await request(port, `${authenticatedResourcePath}&tkn=${encodeURIComponent(connectionToken)}`);
+	if (explicitToken.status === 403) {
+		throw new Error('A request carrying the correct connection token was still rejected with 403.');
+	}
+	console.log(`Unauthenticated and wrongly authenticated requests rejected with 403; the correct token was accepted (${explicitToken.status}).`);
 }
 
 async function verifyWebClient(port: number): Promise<void> {
@@ -299,18 +305,19 @@ async function verifyWebClient(port: number): Promise<void> {
 }
 
 async function verifyNoWebClient(port: number): Promise<void> {
-	const cookie = await tokenCookie(port);
-
-	const root = await request(port, '/', { cookie });
-	if (root.status !== 404) {
-		throw new Error(`Expected 404 from the REH package root, received ${root.status}.`);
+	// The token query parameter only issues a workbench cookie on the web route,
+	// which a REH-only package does not serve.
+	const tokenQuery = await request(port, `/?tkn=${encodeURIComponent(connectionToken)}`);
+	if (tokenQuery.status !== 404) {
+		throw new Error(`Expected 404 from the REH package root, received ${tokenQuery.status}.`);
 	}
 
-	const workbench = await request(port, '/static/out/vs/code/browser/workbench/workbench.js', { cookie });
-	if (workbench.status !== 404) {
-		throw new Error(`Expected 404 for the browser workbench bundle, received ${workbench.status}.`);
+	// Only the connection token is required for /version; no workbench bundle exists.
+	const version = await request(port, '/version');
+	if (version.status !== 200) {
+		throw new Error(`Expected 200 from /version on the REH package, received ${version.status}.`);
 	}
-	console.log('REH package serves no browser workbench.');
+	console.log('REH package serves no browser workbench or connection cookie.');
 }
 
 async function stopProcess(child: ChildProcess): Promise<void> {

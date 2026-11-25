@@ -61,6 +61,10 @@ jobs:
           : > "$log_file"
           pnpm run gulp vscode-reh-linux-arm64-min 2>&1 | tee -a "$log_file"
           pnpm run gulp vscode-reh-web-linux-arm64-min 2>&1 | tee -a "$log_file"
+        env:
+          # The pinned built-in extensions are downloaded from GitHub release
+          # assets, whose API is rate limited without a token.
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Summarize build failure
         if: failure()

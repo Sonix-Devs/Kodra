@@ -172,11 +172,13 @@ jobs:
             file "$package/node"
             readelf -h "$package/node" | grep -E 'Machine:.*AArch64'
             # Artifact transport does not preserve the executable bit that the
-            # build job asserts; restore it for the launcher scripts the
+            # build job asserts; restore it for the executables and scripts the
             # packages are expected to run.
-            for script in "$package/bin/kodra-server" "$package/bin"/remote-cli/* "$package/bin"/helpers/*.sh; do
-              head -n 1 "$script" | grep -q '^#!' && chmod +x "$script"
+            chmod +x "$package/node"
+            for script in "$package"/bin/* "$package"/bin/remote-cli/* "$package"/bin/helpers/*.sh; do
+              test -f "$script" && head -n 1 "$script" | grep -q '^#!' && chmod +x "$script"
             done
+            test -x "$package/node"
             test -x "$package/bin/kodra-server"
           done
 

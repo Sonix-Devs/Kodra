@@ -329,5 +329,11 @@ async function stopProcess(child: ChildProcess): Promise<void> {
 
 main(process.argv[2]).catch(error => {
 	console.error(error);
+
+	// The server output is part of the error message; collapse it so the first
+	// line stays a single, readable CI annotation.
+	const summary = String(error instanceof Error ? error.message : error).split(/\r?\n/)[0];
+	const escape = (value: string) => value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+	console.log(`::error title=Packaged server smoke test::${escape(summary)}`);
 	process.exit(1);
 });

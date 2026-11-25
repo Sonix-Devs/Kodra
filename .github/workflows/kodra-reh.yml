@@ -108,18 +108,32 @@ jobs:
             test ! -e "$package/extensions/copilot"
             test -x "$package/bin/kodra-server"
             head -n 1 "$package/bin/kodra-server" | grep -E '^#!/usr/bin/env sh$'
-            # No shipped code may reference a Microsoft-hosted download,
-            # marketplace or telemetry endpoint. Kodra publishes no source maps,
-            # so even a comment-only reference is a product defect here.
+            # No shipped code may reference a Microsoft-hosted download or CDN
+            # endpoint. Kodra publishes no source maps, so even a comment-only
+            # reference is a product defect here.
             if grep -rIn --binary-files=without-match \
                 --include='*.js' --include='*.mjs' --include='*.cjs' \
                 -e 'update\.code\.visualstudio\.com' \
                 -e 'vscode-cdn\.net' \
-                -e 'dc\.services\.visualstudio\.com' \
                 "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-origins.log"; then
               echo "Microsoft-hosted endpoint referenced by shipped code in $package:" >&2
               head -n 20 "$RUNNER_TEMP/kodra-origins.log" >&2
               exit 1
+            fi
+            # Microsoft's Application Insights ingestion host may only appear as
+            # the default endpoint constant of the bundled @vscode/extension-telemetry
+            # SDK. Kodra disables telemetry in product.json, so nothing may set an
+            # ingestion endpoint; an assignment or override is a product defect.
+            if grep -rIn --binary-files=without-match --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'dc\.services\.visualstudio\.com' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-telemetry.log"; then
+              if grep -vF '"https://dc.services.visualstudio.com"' "$RUNNER_TEMP/kodra-telemetry.log" \
+                  | grep -qF 'dc.services.visualstudio.com'; then
+                echo "Telemetry ingestion endpoint is not the SDK default constant in $package:" >&2
+                grep -vF '"https://dc.services.visualstudio.com"' "$RUNNER_TEMP/kodra-telemetry.log" | head -n 20 >&2
+                exit 1
+              fi
+              echo "$(wc -l < "$RUNNER_TEMP/kodra-telemetry.log") Application Insights default-endpoint constant(s) are bundled in @vscode/extension-telemetry; product telemetry is disabled."
             fi
             # A Marketplace reference is only acceptable as a documentation
             # hyperlink (`](https://marketplace...)`), never as a fetch target.

@@ -2,7 +2,7 @@
 
 Kodra is an Android-focused code editor based on **Code - OSS**. The project reuses the shared workbench and browser/server code, with a planned native Android shell and a separately built Android/bionic runtime.
 
-> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 45676800604](https://github.com/unalivin/vscode/actions/runs/45676800604): it built and verified both packages, uploaded them, then ran each packaged server on a native ARM64 runner and checked its loopback bind, port-0 handoff, connection-token enforcement and served workbench content. A broader outbound-service review is still in progress. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
+> **Porting status:** Stage 0 is complete and Stage 1 is in progress. The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 45678058972](https://github.com/unalivin/vscode/actions/runs/45678058972): it built and verified both packages, uploaded them, then ran each packaged server on a native ARM64 runner and checked its loopback bind, port-0 handoff, connection-token enforcement and served workbench content. A broader outbound-service review is still in progress. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
 
 Planned canonical repository: <https://github.com/unalivin/kodra> (not currently resolvable in GitHub; this source tree currently lives at <https://github.com/unalivin/vscode>).
 
@@ -18,7 +18,7 @@ See [`PORTING_NOTES.md`](PORTING_NOTES.md) for the staged plan, architecture, au
 
 ## Linux ARM64 REH artifacts
 
-[Successful Actions run 45676800604](https://github.com/unalivin/vscode/actions/runs/45676800604) uploaded two 14-day artifacts:
+[Successful Actions run 45678058972](https://github.com/unalivin/vscode/actions/runs/45678058972) uploaded two 14-day artifacts:
 
 - `vscode-reh-linux-arm64` — the Linux ARM64 remote extension host server (186,432,875 bytes).
 - `vscode-reh-web-linux-arm64` — the browser workbench/web server assets (219,458,299 bytes).

@@ -160,6 +160,7 @@ class TestDevContainerAgentHostMainService extends DevContainerAgentHostMainServ
 				override readonly quality = 'insider';
 				override readonly serverDataFolderName = '.vscode-server-oss';
 				override readonly commit = commit;
+				override readonly cliDownloadUrlBase = 'https://downloads.example.test';
 			}(),
 			NullTelemetryService,
 			configurationService,
@@ -1809,7 +1810,7 @@ suite('Dev Container Agent Host Main Service', () => {
 		await service.disconnect('connection');
 
 		assert.ok(service.execCommands.some(command =>
-			command.includes('https://update.code.visualstudio.com/latest/cli-alpine-x64/insider')
+			command.includes('https://downloads.example.test/latest/cli-alpine-x64/insider')
 		));
 	});
 });

@@ -226,6 +226,7 @@ export class WSLRemoteAgentHostMainService extends Disposable implements IWSLRem
 			serverDataFolderName: this._serverDataFolderName,
 			quality: this._quality,
 			commit: this._commit,
+			cliDownloadUrlBase: this._productService.cliDownloadUrlBase,
 			os: targetOs,
 			arch: targetArch,
 			telemetryLevel: telemetryLevelToAgentHostValue(this._telemetryService.telemetryLevel),

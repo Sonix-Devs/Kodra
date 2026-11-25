@@ -127,6 +127,12 @@ export interface IProductConfiguration {
 
 	readonly downloadUrl?: string;
 	readonly updateUrl?: string;
+	/**
+	 * Base URL of the server/CLI download artifacts used when a remote Agent Host
+	 * has to install a matching CLI. Absent when the product does not publish
+	 * CLI downloads, in which case no download host is contacted.
+	 */
+	readonly cliDownloadUrlBase?: string;
 	readonly webUrl?: string;
 	readonly webEndpointUrlTemplate?: string;
 	readonly webviewContentExternalBaseUrlTemplate?: string;

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Uploads one agent-SDK tarball to the `main.vscode-cdn.net` storage account.
+ * Uploads one agent-SDK tarball to the storage account named by `AGENT_SDK_CDN_BASE_URL`.
  * Callable as both a library function (`uploadOne(...)`) and a thin CLI.
  *
  * Auth: reads `AZURE_STORAGE_ACCOUNT`, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,

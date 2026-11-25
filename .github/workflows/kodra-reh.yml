@@ -107,6 +107,18 @@ jobs:
             test ! -e "$package/extensions/copilot"
             test -x "$package/bin/kodra-server"
             head -n 1 "$package/bin/kodra-server" | grep -E '^#!/usr/bin/env sh$'
+            # No shipped server/browser code may reference a Microsoft-hosted
+            # origin. Source-map and comment-only hits are covered too: Kodra
+            # publishes no source maps, so any reference is a product defect.
+            if grep -rIl --binary-files=without-match \
+                -e 'update\.code\.visualstudio\.com' \
+                -e 'main\.vscode-cdn\.net' \
+                -e 'marketplace\.visualstudio\.com' \
+                -e 'dc\.services\.visualstudio\.com' \
+                "$package/out" "$package/extensions"; then
+              echo "Microsoft-hosted origin referenced by shipped code in $package" >&2
+              exit 1
+            fi
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done

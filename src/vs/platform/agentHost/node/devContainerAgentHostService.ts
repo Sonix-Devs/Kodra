@@ -443,6 +443,7 @@ export abstract class DevContainerAgentHostService extends Disposable implements
 				serverDataFolderName,
 				quality,
 				commit: this._productService.commit,
+				cliDownloadUrlBase: this._productService.cliDownloadUrlBase,
 				reportInstalling: () => this._logService.info(`${LOG_PREFIX} Installing VS Code CLI in Dev Container...`),
 				logService: this._logService,
 				logPrefix: LOG_PREFIX,

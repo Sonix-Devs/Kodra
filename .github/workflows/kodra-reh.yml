@@ -149,6 +149,32 @@ jobs:
               fi
               echo "$(wc -l < "$RUNNER_TEMP/kodra-marketplace.log") Marketplace references in $package are documentation hyperlinks."
             fi
+            # Additional Microsoft service hosts that must not appear in shipped code:
+            # Azure Functions deployments (e.g. legacy settings sync) and the
+            # Application Insights ingestion aliases.
+            if grep -rIn --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                -e '\.azurewebsites\.net' \
+                -e 'applicationinsights\.io' \
+                -e 'applicationinsights\.azure\.com' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-services.log"; then
+              echo "Microsoft service host referenced by shipped code in $package:" >&2
+              head -n 20 "$RUNNER_TEMP/kodra-services.log" >&2
+              exit 1
+            fi
+            # Record every absolute host the shipped JavaScript mentions, so the
+            # outbound-service review is based on the artifact rather than on the sources.
+            grep -rhoE --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'https?://[A-Za-z0-9.-]+' "$package/out" "$package/extensions" \
+              | sed -E 's#^https?://##' | tr '[:upper:]' '[:lower:]' | sort | uniq -c | sort -rn \
+              > "$RUNNER_TEMP/kodra-hosts.log"
+            echo "### Absolute hosts referenced by $(basename "$package")" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            head -n 40 "$RUNNER_TEMP/kodra-hosts.log" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$(wc -l < "$RUNNER_TEMP/kodra-hosts.log") distinct absolute hosts referenced in $package:" >&2
+            head -n 20 "$RUNNER_TEMP/kodra-hosts.log" >&2
             echo "Packaged bin files for $package:"
             find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
           done

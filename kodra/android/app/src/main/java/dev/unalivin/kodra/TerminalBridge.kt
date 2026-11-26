@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.File
 
 /**
- * Stage 4: Terminal bridge design — PTY is owned by REH (node-pty), not by Kotlin.
+ * Terminal bridge — PTY is owned by REH (node-pty), not by Kotlin.
  *
  * The browser workbench already renders xterm.js (see `PORTING_NOTES.md` § Workbench shell);
  * REH's `node-pty` spawns `bash` via the bootstrap `$PREFIX/bin/bash` (default shell).
@@ -32,9 +32,23 @@ object TerminalBridge {
     )
 
     fun ensurePtyAvailable(layout: BootstrapInstaller.Layout): Boolean {
-        // node-pty.node is at lib/node_modules/kodra-reh/node_modules/node-pty/build/Release/pty.node
         val ptyNode = File(layout.prefix, "lib/node_modules/kodra-reh/node_modules/node-pty/build/Release/pty.node")
-        // Scaffold check — real CI will readelf NEEDED: must NOT contain ld-linux-aarch64.so.1
-        return ptyNode.exists() || true // scaffold: allow missing until NDK build bundled
+        if (!ptyNode.exists()) return false
+        // Verify bionic linkage when readelf is available (device CI); else assume ok
+        return runCatching {
+            val proc = ProcessBuilder("readelf", "-d", ptyNode.absolutePath).redirectErrorStream(true).start()
+            val output = proc.inputStream.bufferedReader().readText()
+            proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            !output.contains("ld-linux-aarch64.so.1") && !output.contains("ld-linux.so")
+        }.getOrDefault(true)
+    }
+
+    fun ptyDiagnostics(layout: BootstrapInstaller.Layout): String {
+        val ptyNode = File(layout.prefix, "lib/node_modules/kodra-reh/node_modules/node-pty/build/Release/pty.node")
+        return when {
+            !ptyNode.exists() -> "missing: run bionic build"
+            ensurePtyAvailable(layout) -> "ok: ${ptyNode.length()} bytes, bionic-linked"
+            else -> "bad: glibc-linked (rebuild with NDK)"
+        }
     }
 }

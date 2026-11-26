@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.File
 
 /**
- * Stage 4: Git bridge — built-in Git extension stays, but its `git` binary is the bootstrap one.
+ * Git bridge — built-in Git extension stays, but its `git` binary is the bootstrap one.
  *
  * Workbench `extensions/git` discovers `git` via:
  *   `git.path` setting → else `$PATH` → else `which git`
@@ -23,8 +23,7 @@ object GitBridge {
     fun install(context: Context, layout: BootstrapInstaller.Layout) {
         val bin = File(layout.prefix, "bin")
         val helper = File(bin, HELPER_NAME)
-        // Helper script — reads token from Keystore via `kodra` CLI shim (Stage 4)
-        // Scaffold: write script that echoes token from filesDir/git-token (populated by GithubAuth)
+        // Helper script — reads token from filesDir/github-token (populated by GithubAuth)
         helper.writeText(
             """
             #!/system/bin/sh
@@ -40,11 +39,8 @@ object GitBridge {
         )
         helper.setExecutable(true)
 
-        // Configure git — run `git config --global credential.helper <helper>`
-        // Real: Runtime.exec("$PREFIX/bin/git config --global credential.helper $helper")
-        // Scaffold: skip exec on emulator without bootstrap
         val git = File(bin, "git")
-        if (!git.exists()) return
+        if (!git.exists()) return // NDK bootstrap not yet installed — helper will be used on next launch
         runCatching {
             ProcessBuilder(git.absolutePath, "config", "--global", "credential.helper", helper.absolutePath)
                 .apply { environment()["HOME"] = layout.home.absolutePath }

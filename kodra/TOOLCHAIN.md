@@ -82,7 +82,9 @@ node -e "require('node-pty').spawn('bash',[],{}).onData(()=>{})"  # fork+read
 glibc REH smoke (`build/kodra/smokeTestPackagedServer.ts`) will be duplicated with
 the bionic Node once available; glibc remains reference only.
 
-## Not in this commit
+## Build glue (merged)
 
-- No NDK build scripts checked in (only this spec).
-- No Gradle — Stage 3.
+- NDK scripts: `build/kodra/bionicBuild.ts` (Node + 5 addons + rg, ELF lint)
+- Gradle: `kodra/android/` (see `kodra/android/README.md`)
+
+Device CI verifies `$PREFIX/bin/node --version` + `bash -c` + `node-pty` smoke.

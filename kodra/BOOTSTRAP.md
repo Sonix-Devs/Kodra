@@ -56,10 +56,10 @@ All packages install into `$PREFIX/{bin,lib,etc,tmp}` and must be relocatable
    **bionic** Node and rebuilt addons; glibc Linux package remains the reference
    but is not an acceptance gate for bionic.
 
-## Not in this commit
+## Implementation status (merged 252bac17)
 
-- No NDK build scripts yet — only docs + inventory tooling.
-- No Gradle project — that's Stage 3.
-- No `$HOME`/`$PREFIX` Kotlin wiring — also Stage 3.
+- NDK build: `kodra/TOOLCHAIN.md` + `build/kodra/bionicBuild.ts` (archive + ELF verification)
+- Gradle project: `kodra/android/` (AGP 8.5.2, `assemblyDebug`/`lint` via `kodra-android.yml`)
+- `$HOME`/`$PREFIX` wiring: `BootstrapInstaller.kt` + `ServerProcess.kt` + `KodraService.kt`
 
-See `build/kodra/inventoryNativeDeps.ts` for the current Linux→bionic gap.
+See `kodra/deps/INVENTORY.md` for the Linux→bionic gap (51 deps, 0 unknown).

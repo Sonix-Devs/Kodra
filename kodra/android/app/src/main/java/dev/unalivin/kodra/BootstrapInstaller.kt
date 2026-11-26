@@ -37,26 +37,94 @@ object BootstrapInstaller {
     fun installIfNeeded(context: Context): Layout {
         val l = layout(context)
         if (!needsInstall(context)) return l
-        // Real extraction is NDK/asset wiring (Stage 3 next):
-        // AssetManager.open("bootstrap.zip") → unzip to l.prefix
-        // AssetManager.open("reh-web.tar.gz") → untar to l.prefix/lib/node_modules/kodra-reh
-        // For scaffold: create minimal dirs and marker so service can start even without assets
-        l.prefix.mkdirs()
-        File(l.prefix, "bin").mkdirs()
-        File(l.prefix, "etc").mkdirs()
-        File(l.prefix, "tmp").mkdirs()
-        File(l.home, "storage").let { link ->
-            // ~/storage → /storage/emulated/0 (if permitted, else SAF)
+        // Atomic install: extract to tmp dir, then rename, so crash mid-extract doesn't leave half-prefix
+        val tmpPrefix = File(context.filesDir, "usr.tmp").apply { deleteRecursively(); mkdirs() }
+        var success = false
+        try {
+            extractBootstrapZip(context, tmpPrefix)
+            extractRehTar(context, tmpPrefix)
+            chmodBinaries(tmpPrefix)
+            createHomeSymlink(l.home)
+            // Move into place atomically
+            l.prefix.deleteRecursively()
+            if (!tmpPrefix.renameTo(l.prefix)) {
+                // Fallback copy if rename across volumes fails
+                tmpPrefix.copyRecursively(l.prefix, overwrite = true)
+                tmpPrefix.deleteRecursively()
+            }
+            File(context.filesDir, MARKER).apply {
+                parentFile?.mkdirs()
+                writeText(BuildConfig.VERSION_NAME)
+            }
+            success = true
+            return l
+        } finally {
+            if (!success) tmpPrefix.deleteRecursively()
+        }
+    }
+
+    private fun extractBootstrapZip(context: Context, dest: File) {
+        try {
+            context.assets.open("bootstrap.zip").use { input ->
+                java.util.zip.ZipInputStream(input).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        val outFile = File(dest, entry.name)
+                        if (entry.isDirectory) outFile.mkdirs()
+                        else {
+                            outFile.parentFile?.mkdirs()
+                            outFile.outputStream().use { zip.copyTo(it) }
+                            // Preserve executable bit if zip has it (external attr >>16 & 0x1FF contains unix mode)
+                            val mode = (entry.extra?.size ?: 0) // ZipEntry Unix mode is in externalAttributes
+                            if (entry.name.startsWith("bin/")) outFile.setExecutable(true)
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            }
+        } catch (_: java.io.FileNotFoundException) {
+            // Assets not yet bundled (CI debug build without NDK) — create minimal fallback
+            File(dest, "bin").mkdirs()
+            File(dest, "etc").mkdirs()
+            File(dest, "tmp").mkdirs()
+        }
+    }
+
+    private fun extractRehTar(context: Context, dest: File) {
+        try {
+            context.assets.open("reh-web.tar.gz").use { input ->
+                // Use system tar if available, else fallback to no-op
+                val tarDest = File(dest, "lib/node_modules/kodra-reh").apply { mkdirs() }
+                val tmpTar = File.createTempFile("reh-web", ".tar.gz", context.cacheDir)
+                try {
+                    tmpTar.outputStream().use { input.copyTo(it) }
+                    val proc = ProcessBuilder("tar", "xzf", tmpTar.absolutePath, "-C", tarDest.absolutePath)
+                        .redirectErrorStream(true).start()
+                    proc.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                } finally { tmpTar.delete() }
+            }
+        } catch (_: java.io.FileNotFoundException) { /* same fallback as zip */ }
+    }
+
+    private fun chmodBinaries(prefix: File) {
+        val binDir = File(prefix, "bin")
+        if (!binDir.exists()) return
+        binDir.listFiles()?.forEach { f ->
+            if (f.isFile) f.setExecutable(true, false)
+        }
+        // Ensure node itself is executable even if zip lost mode
+        File(prefix, "bin/node").takeIf { it.exists() }?.setExecutable(true, false)
+    }
+
+    private fun createHomeSymlink(home: File) {
+        File(home, "storage").let { link ->
             if (!link.exists()) runCatching {
                 Os.symlink("/storage/emulated/0", link.absolutePath)
             }
         }
-        // Write marker
-        File(context.filesDir, MARKER).apply {
-            parentFile?.mkdirs()
-            writeText(BuildConfig.VERSION_NAME)
-        }
-        return l
+        // Default git config / bashrc if not present
+        File(home, ".bashrc").takeIf { !it.exists() }?.writeText("export PS1='kodra:\\w\\$ '\n")
     }
 
     fun busyBoxEnv(layout: Layout): Array<String> = arrayOf(

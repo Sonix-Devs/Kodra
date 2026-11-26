@@ -1,0 +1,8 @@
+# Copy to local.properties (ignored) and fill per machine. Do NOT commit keystore paths or tokens.
+sdk.dir=/home/user/Android/Sdk
+# ndk.dir=/home/user/Android/Sdk/ndk/26.1.10909125
+# kodra.keystore.path=/home/user/.keystore/kodra-release.jks
+# kodra.keystore.password=
+# kodra.keyAlias=kodra
+# kodra.keyPassword=
+# github.oauth.clientId= (Stage 4 — never commit)

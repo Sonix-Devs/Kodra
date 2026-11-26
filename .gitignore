@@ -59,3 +59,12 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+
+# Kodra Android — local-only
+kodra/android/local.properties
+kodra/android/app/release.keystore
+kodra/android/app/build/
+kodra/android/.gradle/
+kodra/android/build/
+kodra/android/gradle/wrapper/gradle-wrapper.jar
+# Keep wrapper properties but not the jar (CI regenerates via `gradle wrapper`)

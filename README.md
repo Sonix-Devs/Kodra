@@ -2,7 +2,7 @@
 
 Kodra is an Android-focused code editor based on **Code - OSS**. The project reuses the shared workbench and browser/server code, with a planned native Android shell and a separately built Android/bionic runtime.
 
-> **Porting status:** Stage 0 and Stage 1 are complete (Stage 1 finalized 2026-11-26). The Linux ARM64 REH/REH-web workflow succeeded in [Actions run 45707121359](https://github.com/unalivin/vscode/actions/runs/45707121359) on commit `a5831013a3b9fd40b72fa2674e30ec964ceaa741` (docs-only `cc1bdbbc` follows): it built and verified both packages, uploaded them, then ran each packaged server on a native ARM64 runner and checked its loopback bind, port-0 handoff, connection-token enforcement, served workbench content and product-level gating of Microsoft-hosted services, plus a per-package host inventory. These are Linux/glibc packages, not Android/bionic binaries and not an APK. Android runtime, shell, device behavior, and release support are not yet verified.
+> **Porting status:** Stages 0–2 (scaffold) are complete (2026-11-26). Stage 1's Linux ARM64 REH/REH-web workflow succeeded in [Actions run 45707121359](https://github.com/unalivin/vscode/actions/runs/45707121359) on `a5831013` (host inventory gated); Stage 2 scaffold triaged all 51 deps (`kodra/deps/INVENTORY.md`, 0 unknown) and defined the bionic NDK toolchain + `$PREFIX` layout (`kodra/TOOLCHAIN.md`, `kodra/prefix-layout.json`). These are Linux/glibc packages, not Android/bionic binaries and not an APK. No bionic Node build or device run has occurred.
 
 Planned canonical repository: <https://github.com/unalivin/kodra> (not currently resolvable in GitHub; this source tree currently lives at <https://github.com/unalivin/vscode>).
 

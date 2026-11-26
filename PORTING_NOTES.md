@@ -2,11 +2,11 @@
 
 ## Audit snapshot
 
-- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stage 1 complete)
-- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `a5831013a3b9fd40b72fa2674e30ec964ceaa741` (Stage 1 head; docs-only `cc1bdbbc` follows with identical artifacts)
-- **Working branch:** `arena/4003317d-vscode`
-- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
-- **Evidence level:** static source/configuration inspection, limited local Stage 1 transpile/type-check/server-test evidence, and **six** successful GitHub Linux ARM64 REH/REH-web builds with package checks, origin assertions and artifact uploads (latest `45707121359` on `a5831013`). Host-inventory artifact added (`kodra-host-inventory`, 2,809 B). No Kodra APK, Android runtime, or device behavior has been built or tested; local extraction of the uploaded archives is blocked by the sandbox's download-host allowlist (blob storage host not allowlisted).
+- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–2 scaffold complete)
+- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `b6524ed1` (Stage 2 head on `arena/b9db3fb7-vscode`; Stage 1 merged as `4759c91a`)
+- **Working branch:** `arena/b9db3fb7-vscode`
+- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (new — Android prefix/toolchain docs) plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
+- **Evidence level:** Stage 1: **six** successful GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B). Stage 2: static inventory + toolchain spec only — `kodra/deps/INVENTORY.md` fully triaged (51 deps, 0 unknown), `kodra/TOOLCHAIN.md` + `kodra/prefix-layout.json` define the NDK r26+ `aarch64-linux-android28` build and `$PREFIX`/`$HOME` env. No bionic Node build, no APK, no device run; blob-storage download still blocked by sandbox allowlist.
 
 ## Stage progress
 
@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 0 — audit and plan | **Complete** | Source map, architecture decisions and owner choices recorded below; Stage 1 was approved. |
 | 1 — rebrand and CI | **Complete (2026-11-26)** | CI builds, asserts and uploads both Linux ARM64 packages, runs each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating, and emits a per-package host inventory. Final green: `45707121359` on `a5831013` (docs-only `cc1bdbbc` follows). Outbound-service review below: every Microsoft host is removed or product-gated and enforced in CI; no network trace available in this sandbox. |
-| 2 — bootstrap | Not started (still paused) | Stage 1's Linux/glibc evidence does not authorize or substitute for Android/bionic runtime work. |
+| 2 — bootstrap | **Complete (scaffold, 2026-11-26)** | `kodra/README.md`, `kodra/BOOTSTRAP.md`, `kodra/TOOLCHAIN.md`, `kodra/prefix-layout.json` and `kodra/deps/INVENTORY.md` (51 deps, 0 unknown: rebuild=5 / replace=2 / omit=2 / binary=42) define the Termux-style `$PREFIX=$HOME` toolchain for NDK r26+ `aarch64-linux-android28` Node 24.22.1. CI gates inventory sync. Stage 1's Linux/glibc REH packages are not Android binaries; actual bionic builds await device CI (Stage 6). |
 | 3 — Android shell | Not started | Kotlin Activity/WebView, service lifecycle, file access and debug APK CI. |
 | 4 — terminal, Git, GitHub login | Not started | Existing workbench Git UI, bootstrap Git, PTY and native GitHub authentication. |
 | 5 — bundled extensions | Not started | The three pinned JavaScript debug/profile extensions are MIT-licensed; other requested extensions still require separate source, license and notice review. |
@@ -112,7 +112,7 @@ This is a source-family map for the Electron-specific implementations found by s
 - `build/gulpfile.reh.ts` defines `vscode-reh` and `vscode-reh-web` tasks. Its target list includes `linux-arm64` but no Android/bionic target. The Linux task downloads and packages the upstream Linux Node binary, native extensions and platform dependencies; this is a Linux build, not an Android executable.
 - `build/azure-pipelines/linux/steps/product-build-linux-compile.yml` builds the REH and REH-web packages and checks Linux `GLIBC`/`GLIBCXX` requirements. `.github/workflows/kodra-reh.yml` builds Linux ARM64 REH and REH-web directories; successful run `45707121359` verified both package identities/architectures, the executable launcher, the absent tunnel metadata/CLI and Copilot extension, uploaded both artifacts, and then ran both packaged servers on a native ARM64 runner to check the loopback bind, port-0 handoff, token enforcement and served workbench content. The artifact and startup gates are evidenced, but these are Linux/glibc packages only. Limited local source/transpile/type-check and server-test evidence is recorded above. This checkout still has no Android Gradle project or Android SDK/Java toolchain.
 - `vscode-reh-web` builds the Node server and serves `src/vs/code/browser/workbench/workbench.html`. `vscode-web` (`build/gulpfile.vscode.web.ts`) is a browser client package, not the local extension-host server. The separate `build/next/MOBILE.md` target is an isolated **Agents** web package; it is not a native Android editor shell and is not the Kodra build target.
-- `remote/package.json` pins Node native build metadata and includes native/runtime-sensitive dependencies such as `node-pty`, `@parcel/watcher`, `@vscode/native-watchdog`, `@vscode/spdlog`, `@vscode/sqlite3` and `kerberos`, alongside Copilot-related packages. Do not assume `node-pty` is the only ABI-sensitive dependency. Stage 2 must inventory the actual packaged dependency closure and rebuild, replace or deliberately omit each dependency with a documented behavior impact.
+- `remote/package.json` pins `nativeBuild.target=24.22.1` and 51 deps. The closure is now fully triaged in `kodra/deps/INVENTORY.md` (from `build/kodra/inventoryNativeDeps.ts`): `rebuild=5` (`node-pty`, `@parcel/watcher`, `@vscode/native-watchdog`, `@vscode/spdlog`, `@vscode/sqlite3` — NDK r26+ `aarch64-linux-android28`), `replace=2` (`kerberos`→omit, `ripgrep-universal`→bootstrap `rg`), `omit=2` (Windows-only), `binary=42` (pure JS/WASM, keep). Unknown=0. See `kodra/BOOTSTRAP.md` + `kodra/TOOLCHAIN.md` for the Termux-style `$PREFIX` and NDK build spec; `kodra/prefix-layout.json` declares the on-device env (`HOME`, `PREFIX`, `LD_LIBRARY_PATH`). CI now asserts the inventory stays in sync.
 - `src/vs/server/node/serverEnvironmentService.ts` exposes host, port, token-file, telemetry and data-directory options. `serverConnectionToken.ts` supports a mandatory token from a file and validates each request. `remoteExtensionHostAgentServer.ts` prints the token in its startup URL; server startup output therefore needs redaction at the Kotlin process boundary. The exact `127.0.0.1` binding and port-0 handoff still require a packaged-server integration test.
 - `src/vs/code/browser/workbench/workbench.html` already has mobile metadata but sets `user-scalable=no`; pinch zoom is deliberately disabled in this template. Touch long-press, pinch-to-zoom, IME composition, cutouts, keyboard resizing and compact phone layout are acceptance tests, not verified properties of the existing page.
 - `remote/web/package.json` includes browser workbench libraries (including xterm.js and TextMate); it is not the source of a native runtime or terminal process. Android/bionic native components must remain local to the APK/bootstrap.
@@ -143,6 +143,15 @@ The built-in Source Control Graph is in core workbench code, not a custom Git UI
 - The server supports explicit host/port/token-file options; its default token persists and its startup URL contains the token (`src/vs/server/node/serverEnvironmentService.ts`, `serverConnectionToken.ts`, `remoteExtensionHostAgentServer.ts`).
 - The source tree contains no Android Gradle project, and this sandbox has no Java, Gradle, Android SDK or `adb`. No Android APK, Android runtime, or device behavior has been verified; limited Stage 1 local validation is recorded above.
 - The Source Control Graph view has no dedicated enable setting in the inspected source and is registered for visibility when a history provider exists (`src/vs/workbench/contrib/scm/browser/scm.contribution.ts`).
+
+## Stage 2 verification (2026-11-26 — scaffold complete)
+
+- `node build/kodra/inventory-to-markdown.mjs` regenerates `kodra/deps/INVENTORY.md` and CI gates it with `git diff --exit-code`; latest file covers all **51** deps from `remote/package.json` with **0 unknown** (`rebuild=5, replace=2, omit=2, binary=42`).
+- `kodra/TOOLCHAIN.md` specifies the NDK r26+ `aarch64-linux-android28` build for Node 24.22.1 and the 5 `rebuild` addons (`node-pty`, `@parcel/watcher`, `@vscode/native-watchdog`, `@vscode/spdlog`, `@vscode/sqlite3`) with `android_ndk_path` + `termux-elf-cleaner` relocatable `$PREFIX`. `kerberos` is documented as omitted (Enterprise GSSAPI), `ripgrep-universal` is replaced by bootstrap-built `rg`.
+- `kodra/prefix-layout.json` locks `$PREFIX=/data/data/dev.unalivin.kodra/files/usr`, `$HOME=/data/data/dev.unalivin.kodra/files/home`, `TMPDIR`, `LD_LIBRARY_PATH` and the SAF bridge for `/storage/emulated/0/Kodra`.
+- `git diff --check` still passes; `kodra/deps` triage is now **zero-unknown** (previously 41). No bionic Node or native `.node` has been built — this sandbox has no NDK, and no APK/device run exists (see *Not proven* below).
+
+**Not proven by this scaffold:** no NDK build has executed, no `prefix` has been installed on a device, no `node-pty` fork has run on bionic. Device CI must still prove `$PREFIX/bin/node --version`, `$PREFIX/bin/bash -c 'echo ok'` and a `node-pty` PTY smoke under the app UID (see `kodra/BOOTSTRAP.md` § Verification). The glibc Linux REH package remains the reference only.
 
 ### Blocked / unverified
 

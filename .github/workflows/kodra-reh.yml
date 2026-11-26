@@ -185,6 +185,17 @@ jobs:
             done
           fi
 
+      - name: Verify bootstrap inventory is up to date
+        run: |
+          set -euo pipefail
+          node build/kodra/inventory-to-markdown.mjs
+          git diff --exit-code -- kodra/deps/INVENTORY.md || {
+            echo "kodra/deps/INVENTORY.md is stale — run 'node build/kodra/inventory-to-markdown.mjs' and commit." >&2
+            git diff -- kodra/deps/INVENTORY.md >&2
+            exit 1
+          }
+          echo "Bootstrap inventory in sync (51 deps, 0 unknown)."
+
       - name: Upload host inventory
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

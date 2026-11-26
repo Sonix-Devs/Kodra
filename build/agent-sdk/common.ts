@@ -170,12 +170,26 @@ export function getSdkTargetForBuild(
 }
 
 /**
+ * Base URL of the agent-SDK CDN. A build that does not distribute SDK
+ * tarballs leaves `AGENT_SDK_CDN_BASE_URL` unset, so no CDN host is ever
+ * baked into `product.json`.
+ */
+const cdnBaseUrl = process.env['AGENT_SDK_CDN_BASE_URL'];
+
+function requireCdnBaseUrl(): string {
+	if (!cdnBaseUrl) {
+		throw new Error('AGENT_SDK_CDN_BASE_URL must be set to build agent-SDK CDN URLs.');
+	}
+	return cdnBaseUrl.replace(/\/+$/, '');
+}
+
+/**
  * Builds the CDN URL the per-platform `product.agentSdks.<sdk>.url` points at.
  * Content-addressed under `agent-sdk/<sdk>/<version>/<target>.tgz`. Matches
  * the upload path written by `upload.ts`.
  */
 export function buildCdnUrl(sdk: Sdk, sdkVersion: string, sdkTarget: string): string {
-	return `https://main.vscode-cdn.net/agent-sdk/${sdk}/${sdkVersion}/${sdkTarget}.tgz`;
+	return `${requireCdnBaseUrl()}/agent-sdk/${sdk}/${sdkVersion}/${sdkTarget}.tgz`;
 }
 
 /**
@@ -187,7 +201,7 @@ export function buildCdnUrl(sdk: Sdk, sdkVersion: string, sdkTarget: string): st
  * concrete target suffix.
  */
 export function buildCdnUrlTemplate(sdk: Sdk, sdkVersion: string): string {
-	return `https://main.vscode-cdn.net/agent-sdk/${sdk}/${sdkVersion}/{sdkTarget}.tgz`;
+	return `${requireCdnBaseUrl()}/agent-sdk/${sdk}/${sdkVersion}/{sdkTarget}.tgz`;
 }
 
 /** Streams `filePath` into a sha256 hasher. Avoids reading the whole file

@@ -252,6 +252,8 @@ export interface IComposeAgentHostBootstrapScriptArgs {
 	readonly serverDataFolderName: string;
 	readonly quality: string;
 	readonly commit: string | undefined;
+	/** `product.cliDownloadUrlBase`; when absent, no CLI download is attempted. */
+	readonly cliDownloadUrlBase: string | undefined;
 	readonly os: string;
 	readonly arch: string;
 	readonly telemetryLevel?: TelemetryConfiguration;
@@ -282,7 +284,10 @@ export function composeAgentHostBootstrapScript(args: IComposeAgentHostBootstrap
 	}
 	const installRoot = getRemoteCLIInstallRoot(args.serverDataFolderName);
 	const cliBin = getRemoteCLIBin(args.serverDataFolderName, args.quality, args.commit);
-	const url = buildCLIDownloadUrl(args.os, args.arch, args.quality, args.commit);
+	const url = buildCLIDownloadUrl(args.cliDownloadUrlBase, args.os, args.arch, args.quality, args.commit);
+	if (!url) {
+		throw new Error('This product does not configure a CLI download URL, so an agent host CLI cannot be installed in WSL.');
+	}
 	const agentHostCommand = buildAgentHostBaseCommand(cliBin, args.serverDataFolderName, telemetryLevel);
 	const launch = buildWslAgentHostLaunch(agentHostCommand);
 

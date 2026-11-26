@@ -309,51 +309,57 @@ suite('SSH Remote Agent Host Helpers', () => {
 
 	suite('buildCLIDownloadUrl', () => {
 		const commit = 'abcdef0123456789abcdef0123456789abcdef01';
+		const base = 'https://downloads.example.test';
+
+		test('returns undefined when the product configures no download base', () => {
+			assert.strictEqual(buildCLIDownloadUrl(undefined, 'linux', 'x64', 'insider'), undefined);
+			assert.strictEqual(buildCLIDownloadUrl('', 'linux', 'x64', 'insider', commit), undefined);
+		});
 
 		test('uses `latest` URL when commit is omitted', () => {
 			assert.strictEqual(
-				buildCLIDownloadUrl('linux', 'x64', 'insider'),
-				'https://update.code.visualstudio.com/latest/cli-linux-x64/insider'
+				buildCLIDownloadUrl(base, 'linux', 'x64', 'insider'),
+				'https://downloads.example.test/latest/cli-linux-x64/insider'
 			);
 		});
 
 		test('works for darwin arm64 stable (no commit)', () => {
 			assert.strictEqual(
-				buildCLIDownloadUrl('darwin', 'arm64', 'stable'),
-				'https://update.code.visualstudio.com/latest/cli-darwin-arm64/stable'
+				buildCLIDownloadUrl(base, 'darwin', 'arm64', 'stable'),
+				'https://downloads.example.test/latest/cli-darwin-arm64/stable'
 			);
 		});
 
 		test('uses the Alpine artifact for musl Linux', () => {
 			assert.strictEqual(
-				buildCLIDownloadUrl('alpine', 'x64', 'insider'),
-				'https://update.code.visualstudio.com/latest/cli-alpine-x64/insider'
+				buildCLIDownloadUrl(base, 'alpine', 'x64', 'insider'),
+				'https://downloads.example.test/latest/cli-alpine-x64/insider'
 			);
 		});
 
 		test('pins to commit when provided', () => {
 			assert.strictEqual(
-				buildCLIDownloadUrl('linux', 'x64', 'insider', commit),
-				`https://update.code.visualstudio.com/commit:${commit}/cli-linux-x64/insider`,
+				buildCLIDownloadUrl(base, 'linux', 'x64', 'insider', commit),
+				`https://downloads.example.test/commit:${commit}/cli-linux-x64/insider`,
 			);
 		});
 
 		test('pins to commit for darwin arm64 stable', () => {
 			assert.strictEqual(
-				buildCLIDownloadUrl('darwin', 'arm64', 'stable', commit),
-				`https://update.code.visualstudio.com/commit:${commit}/cli-darwin-arm64/stable`,
+				buildCLIDownloadUrl(base, 'darwin', 'arm64', 'stable', commit),
+				`https://downloads.example.test/commit:${commit}/cli-darwin-arm64/stable`,
 			);
 		});
 
 		test('rejects unsafe commit values', () => {
-			assert.throws(() => buildCLIDownloadUrl('linux', 'x64', 'insider', 'foo;rm'), /Unsafe commit/);
+			assert.throws(() => buildCLIDownloadUrl(base, 'linux', 'x64', 'insider', 'foo;rm'), /Unsafe commit/);
 		});
 
 		test('normalizes uppercase hex commits to lowercase', () => {
 			const upper = 'ABCDEF0123456789ABCDEF0123456789ABCDEF01';
 			assert.strictEqual(
-				buildCLIDownloadUrl('linux', 'x64', 'insider', upper),
-				`https://update.code.visualstudio.com/commit:abcdef0123456789abcdef0123456789abcdef01/cli-linux-x64/insider`,
+				buildCLIDownloadUrl(base, 'linux', 'x64', 'insider', upper),
+				`https://downloads.example.test/commit:abcdef0123456789abcdef0123456789abcdef01/cli-linux-x64/insider`,
 			);
 		});
 	});
@@ -687,6 +693,7 @@ suite('SSH Remote Agent Host Helpers', () => {
 				serverDataFolderName: '.vscode-server',
 				quality: 'insider',
 				commit: undefined,
+				cliDownloadUrlBase: 'https://downloads.example.test',
 				reportInstalling: () => { },
 				logService: new NullLogService(),
 			};

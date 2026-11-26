@@ -21,6 +21,8 @@ export interface IRemoteAgentHostCliInstallOptions {
 	readonly serverDataFolderName: string;
 	readonly quality: string;
 	readonly commit: string | undefined;
+	/** `product.cliDownloadUrlBase`; when absent, no CLI download is attempted. */
+	readonly cliDownloadUrlBase: string | undefined;
 	readonly reportInstalling: () => void;
 	readonly logService: ILogService;
 	readonly logPrefix?: string;
@@ -69,8 +71,19 @@ async function ensurePinnedCliInstalled(
 		return { cliBin, installed: false };
 	}
 
+	const url = buildCLIDownloadUrl(options.cliDownloadUrlBase, platform.os, platform.arch, options.quality, commit);
+	if (!url) {
+		const message = `${logPrefix} This product does not configure a CLI download URL; cannot install a matching CLI for commit ${commit}.`;
+		options.logService.warn(`${message} Looking for a fallback CLI...`);
+		const fallback = await findFallbackCli(exec, options);
+		if (fallback) {
+			options.logService.warn(`${logPrefix} Using fallback CLI at ${fallback} (does not match desktop commit ${commit}).`);
+			return { cliBin: fallback, installed: false };
+		}
+		throw new Error(message);
+	}
+
 	options.reportInstalling();
-	const url = buildCLIDownloadUrl(platform.os, platform.arch, options.quality, commit);
 	const installCommand = [
 		`mkdir -p ${installRoot}`,
 		`tmpdir=$(mktemp -d ${installRoot}/.cli-install-XXXXXX)`,
@@ -145,8 +158,12 @@ async function ensureLooseCliInstalled(
 		return { cliBin, installed: false };
 	}
 
+	const url = buildCLIDownloadUrl(options.cliDownloadUrlBase, platform.os, platform.arch, options.quality);
+	if (!url) {
+		throw new Error(`${logPrefix} This product does not configure a CLI download URL; cannot install a remote CLI.`);
+	}
+
 	options.reportInstalling();
-	const url = buildCLIDownloadUrl(platform.os, platform.arch, options.quality);
 	await exec([
 		`mkdir -p ${installRoot}`,
 		`curl -fsSL ${shellEscape(url)} | tar xz -C ${installRoot}`,

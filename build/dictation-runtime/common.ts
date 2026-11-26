@@ -15,7 +15,7 @@
  * onnxruntime / onnxruntime-genai shared libraries. Rather than downloading
  * those from npm + NuGet at runtime, each
  * platform build job produces its own tarball and uploads it to
- * `main.vscode-cdn.net`; the runtime downloads the single content-addressed
+ * the CDN named by `AGENT_SDK_CDN_BASE_URL`; the runtime downloads the single content-addressed
  * tarball for its target (see `foundryLocalRuntime.ts`).
  *
  * There is exactly ONE runtime (unlike the multi-SDK agent-sdk pipeline), so
@@ -152,13 +152,26 @@ export function shouldStampRuntime(vscodePlatform: string, arch: string): boolea
 }
 
 /**
+ * Base URL of the CDN that hosts the dictation runtime. Unset for builds that do
+ * not distribute the runtime, so no CDN host is baked into `product.json`.
+ */
+const cdnBaseUrl = process.env['AGENT_SDK_CDN_BASE_URL'];
+
+function requireCdnBaseUrl(): string {
+	if (!cdnBaseUrl) {
+		throw new Error('AGENT_SDK_CDN_BASE_URL must be set to build dictation-runtime CDN URLs.');
+	}
+	return cdnBaseUrl.replace(/\/+$/, '');
+}
+
+/**
  * The CDN URL `product.dictationRuntime.urlTemplate` resolves to for a concrete
  * target. Content-addressed under
  * `dictation-runtime/<RUNTIME_ID>/<version>/<target>.tgz`. Matches the upload
  * path written by `upload.ts`.
  */
 export function buildCdnUrl(version: string, target: string): string {
-	return `https://main.vscode-cdn.net/dictation-runtime/${RUNTIME_ID}/${version}/${target}.tgz`;
+	return `${requireCdnBaseUrl()}/dictation-runtime/${RUNTIME_ID}/${version}/${target}.tgz`;
 }
 
 /**
@@ -168,7 +181,7 @@ export function buildCdnUrl(version: string, target: string): string {
  * template so a macOS Universal bundle can share one `product.json`.
  */
 export function buildCdnUrlTemplate(version: string): string {
-	return `https://main.vscode-cdn.net/dictation-runtime/${RUNTIME_ID}/${version}/{target}.tgz`;
+	return `${requireCdnBaseUrl()}/dictation-runtime/${RUNTIME_ID}/${version}/{target}.tgz`;
 }
 
 /** Streams `filePath` into a sha256 hasher without buffering the whole file. */

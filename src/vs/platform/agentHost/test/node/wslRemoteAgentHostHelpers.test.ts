@@ -111,6 +111,7 @@ suite('WSL Remote Agent Host Helpers', () => {
 				serverDataFolderName: '.vscode-server',
 				quality: 'stable',
 				commit,
+				cliDownloadUrlBase: 'https://downloads.example.test',
 				os: 'linux',
 				arch: 'x64',
 				telemetryLevel: TelemetryConfiguration.OFF,
@@ -119,11 +120,27 @@ suite('WSL Remote Agent Host Helpers', () => {
 			assert.ok(script.endsWith(`exec ~/.vscode-server/code-${commit} --cli-data-dir ~/.vscode-server/cli --telemetry-level off agent host --port 0 --server-data-dir ~/.vscode-server --idle-timeout 300`));
 		});
 
+		test('refuses to install a CLI when the product configures no download base', () => {
+			assert.throws(
+				() => composeAgentHostBootstrapScript({
+					serverDataFolderName: '.vscode-server',
+					quality: 'stable',
+					commit: 'a'.repeat(40),
+					cliDownloadUrlBase: undefined,
+					os: 'linux',
+					arch: 'x64',
+					telemetryLevel: TelemetryConfiguration.OFF,
+				}),
+				/no CLI download URL/,
+			);
+		});
+
 		test('exports telemetry disablement for a custom command', () => {
 			const script = composeAgentHostBootstrapScript({
 				serverDataFolderName: '.vscode-server',
 				quality: 'stable',
 				commit: undefined,
+				cliDownloadUrlBase: 'https://downloads.example.test',
 				os: 'linux',
 				arch: 'x64',
 				telemetryLevel: TelemetryConfiguration.OFF,

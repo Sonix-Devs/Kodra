@@ -1,0 +1,294 @@
+name: Kodra Linux ARM64 REH
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Linux ARM64 REH packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      NPM_ARCH: arm64
+      VSCODE_ARCH: arm64
+      npm_config_arch: arm64
+      VSCODE_SKIP_PRELAUNCH: '1'
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install Linux build packages
+        uses: ./.github/actions/install-linux-packages
+
+      - name: Install build tooling dependencies
+        working-directory: build
+        run: pnpm install --frozen-lockfile
+
+      - name: Install ARM64 sysroots and workspace dependencies
+        run: |
+          set -euo pipefail
+          source ./build/azure-pipelines/linux/setup-env.sh
+          pnpm run preinstall
+          pnpm install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Build REH and REH-web
+        run: |
+          set -euo pipefail
+          log_file="${RUNNER_TEMP}/kodra-reh-build.log"
+          : > "$log_file"
+          pnpm run gulp vscode-reh-linux-arm64-min 2>&1 | tee -a "$log_file"
+          pnpm run gulp vscode-reh-web-linux-arm64-min 2>&1 | tee -a "$log_file"
+        env:
+          # The pinned built-in extensions are downloaded from GitHub release
+          # assets, whose API is rate limited without a token.
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Summarize build failure
+        if: failure()
+        run: |
+          log_file="${RUNNER_TEMP}/kodra-reh-build.log"
+          if test -s "$log_file"; then
+            {
+              echo '### REH build log tail'
+              echo '```text'
+              tail -n 80 "$log_file"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            python3 - "$log_file" <<'PY'
+          import pathlib
+          import sys
+
+          tail = pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()[-80:]
+          message = '\n'.join(tail)
+          message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=REH build log tail::{message}')
+          PY
+          fi
+
+      - name: Verify Linux ARM64 package contents
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/kodra-verify.log") 2>&1
+          for package in ../vscode-reh-linux-arm64 ../vscode-reh-web-linux-arm64; do
+            test -s "$package/node"
+            file "$package/node"
+            readelf -h "$package/node" | grep -E 'Class:|Machine:.*AArch64'
+            node -e '
+              const p = require(process.argv[1]);
+              if (p.applicationName !== "kodra") throw new Error(`Unexpected product: ${p.applicationName}`);
+              for (const key of ["tunnelApplicationName", "tunnelApplicationConfig", "win32TunnelMutex", "win32TunnelServiceMutex"]) {
+                if (Object.prototype.hasOwnProperty.call(p, key)) throw new Error(`Unexpected tunnel product metadata: ${key}`);
+              }
+              console.log(`${p.nameLong} ${p.version}: ${p.applicationName}; tunnel metadata omitted`);
+            ' "$package/product.json"
+            test ! -e "$package/bin/kodra-tunnel"
+            test ! -e "$package/extensions/copilot"
+            test -x "$package/bin/kodra-server"
+            head -n 1 "$package/bin/kodra-server" | grep -E '^#!/usr/bin/env sh$'
+            # No shipped code may reference a Microsoft-hosted download or CDN
+            # endpoint. Kodra publishes no source maps, so even a comment-only
+            # reference is a product defect here.
+            if grep -rIn --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                -e 'update\.code\.visualstudio\.com' \
+                -e 'vscode-cdn\.net' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-origins.log"; then
+              echo "Microsoft-hosted endpoint referenced by shipped code in $package:" >&2
+              head -n 20 "$RUNNER_TEMP/kodra-origins.log" >&2
+              exit 1
+            fi
+            # Microsoft's Application Insights ingestion host may only appear as
+            # the default endpoint constant of the bundled @vscode/extension-telemetry
+            # SDK. Kodra disables telemetry in product.json, so nothing may set an
+            # ingestion endpoint; an assignment or override is a product defect.
+            if grep -rIn --binary-files=without-match --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'dc\.services\.visualstudio\.com' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-telemetry.log"; then
+              if grep -vF '"https://dc.services.visualstudio.com"' "$RUNNER_TEMP/kodra-telemetry.log" \
+                  | grep -qF 'dc.services.visualstudio.com'; then
+                echo "Telemetry ingestion endpoint is not the SDK default constant in $package:" >&2
+                grep -vF '"https://dc.services.visualstudio.com"' "$RUNNER_TEMP/kodra-telemetry.log" | head -n 20 >&2
+                exit 1
+              fi
+              echo "$(wc -l < "$RUNNER_TEMP/kodra-telemetry.log") Application Insights default-endpoint constant(s) are bundled in @vscode/extension-telemetry; product telemetry is disabled."
+            fi
+            # A Marketplace reference is only acceptable as a documentation
+            # hyperlink (`](https://marketplace...)`), never as a fetch target.
+            if grep -rIn --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'marketplace\.visualstudio\.com' \
+                "$package/out" "$package/extensions" > "$RUNNER_TEMP/kodra-marketplace.log"; then
+              if grep -vF '](https://marketplace.visualstudio.com' "$RUNNER_TEMP/kodra-marketplace.log" \
+                  | grep -qF 'marketplace.visualstudio.com'; then
+                echo "Non-hyperlink Marketplace reference in shipped code of $package:" >&2
+                grep -vF '](https://marketplace.visualstudio.com' "$RUNNER_TEMP/kodra-marketplace.log" | head -n 20 >&2
+                exit 1
+              fi
+              echo "$(wc -l < "$RUNNER_TEMP/kodra-marketplace.log") Marketplace references in $package are documentation hyperlinks."
+            fi
+            # Record every absolute host the shipped JavaScript mentions, so the
+            # outbound-service review is based on the artifact rather than on the sources.
+            (grep -rhoE --binary-files=without-match \
+                --include='*.js' --include='*.mjs' --include='*.cjs' \
+                'https?://[A-Za-z0-9.-]+' "$package/out" "$package/extensions" || true) \
+              | sed -E 's#^https?://##' | tr '[:upper:]' '[:lower:]' | sort | uniq -c | sort -rn \
+              > "$RUNNER_TEMP/kodra-hosts.log"
+            echo "### Absolute hosts referenced by $(basename "$package")" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            head -n 40 "$RUNNER_TEMP/kodra-hosts.log" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$(wc -l < "$RUNNER_TEMP/kodra-hosts.log") distinct absolute hosts referenced in $package:" >&2
+            head -n 20 "$RUNNER_TEMP/kodra-hosts.log" >&2
+            cp "$RUNNER_TEMP/kodra-hosts.log" "$RUNNER_TEMP/kodra-hosts-$(basename "$package").log"
+            echo "Packaged bin files for $package:"
+            find "$package/bin" -maxdepth 2 -type f -printf '%P\n' | sort
+          done
+
+      - name: Summarize package verification failure
+        if: failure()
+        run: |
+          log_file="$RUNNER_TEMP/kodra-verify.log"
+          if test -s "$log_file"; then
+            {
+              echo '### Package verification log tail'
+              echo '```text'
+              tail -n 40 "$log_file"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -n 40 "$log_file" | while IFS= read -r line; do
+              escaped="${line//'%'/'%25'}"
+              escaped="${escaped//$'\r'/'%0D'}"
+              echo "::error title=Package verification::${escaped}"
+            done
+          fi
+
+      - name: Upload host inventory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kodra-host-inventory
+          path: ${{ runner.temp }}/kodra-hosts-*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stage verified packages for artifact upload
+        run: |
+          set -euo pipefail
+          mkdir -p .build/kodra-artifacts
+          mv ../vscode-reh-linux-arm64 .build/kodra-artifacts/vscode-reh-linux-arm64
+          mv ../vscode-reh-web-linux-arm64 .build/kodra-artifacts/vscode-reh-web-linux-arm64
+
+      - name: Upload Linux ARM64 REH artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vscode-reh-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-linux-arm64
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Linux ARM64 REH-web artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vscode-reh-web-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-web-linux-arm64
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Run packaged Linux ARM64 server
+    needs: build
+    # The packages are AArch64; run them on a native ARM64 runner so the
+    # glibc packages execute without emulation.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download verified Linux ARM64 REH package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vscode-reh-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-linux-arm64
+
+      - name: Download verified Linux ARM64 REH-web package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vscode-reh-web-linux-arm64
+          path: .build/kodra-artifacts/vscode-reh-web-linux-arm64
+
+      - name: Confirm the packages are AArch64
+        run: |
+          set -euo pipefail
+          uname -m
+          for package in .build/kodra-artifacts/vscode-reh-linux-arm64 .build/kodra-artifacts/vscode-reh-web-linux-arm64; do
+            file "$package/node"
+            readelf -h "$package/node" | grep -E 'Machine:.*AArch64'
+            # Artifact transport does not preserve the executable bit that the
+            # build job asserts; restore it for the executables and scripts the
+            # packages are expected to run.
+            chmod +x "$package/node"
+            for script in "$package"/bin/* "$package"/bin/remote-cli/* "$package"/bin/helpers/*.sh; do
+              test -f "$script" && head -n 1 "$script" | grep -q '^#!' && chmod +x "$script"
+            done
+            test -x "$package/node"
+            test -x "$package/bin/kodra-server"
+          done
+
+      - name: Run the packaged REH server and verify runtime behavior
+        run: |
+          set -euo pipefail
+          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-linux-arm64 2>&1 | tee "$RUNNER_TEMP/kodra-reh.log"
+
+      - name: Run the packaged REH-web server and verify runtime behavior
+        run: |
+          set -euo pipefail
+          node build/kodra/smokeTestPackagedServer.ts .build/kodra-artifacts/vscode-reh-web-linux-arm64 2>&1 | tee "$RUNNER_TEMP/kodra-reh-web.log"
+
+      - name: Summarize smoke failure
+        if: failure()
+        run: |
+          for log_file in "$RUNNER_TEMP/kodra-reh.log" "$RUNNER_TEMP/kodra-reh-web.log"; do
+            if test -s "$log_file"; then
+              {
+                echo "### $(basename "$log_file") tail"
+                echo '```text'
+                tail -n 40 "$log_file"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              tail -n 40 "$log_file" | while IFS= read -r line; do
+                escaped="${line//'%'/'%25'}"
+                escaped="${escaped//$'\r'/'%0D'}"
+                echo "::error title=Packaged server smoke test::${escaped}"
+              done
+            fi
+          done

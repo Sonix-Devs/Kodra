@@ -35,6 +35,7 @@ suite('Remote Agent Host CLI installer cache', () => {
 				serverDataFolderName: '.vscode-server-insiders',
 				quality: 'insider',
 				commit: pinned ? commit : undefined,
+				cliDownloadUrlBase: 'https://downloads.example.test',
 				cliCacheDir: shared ? '/vscode/vscode-server-insiders/cli/bin/linux-arm64' : undefined,
 				reportCacheStatus: message => messages.push(message),
 				reportInstalling: () => { },

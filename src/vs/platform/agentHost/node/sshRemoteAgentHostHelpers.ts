@@ -181,14 +181,20 @@ export function resolveRemotePlatform(unameS: string, unameM: string, libc = '')
 }
 
 /**
- * URL of the CLI download artifact.
+ * URL of the CLI download artifact, or `undefined` when the product does not
+ * configure `product.cliDownloadUrlBase`.
  *
  * When `commit` is provided, uses the commit-pinned URL form so we get
  * the exact CLI matching the current desktop build (mirrors Remote-SSH).
  * When `commit` is undefined (dev/OSS builds), falls back to `latest`.
+ *
+ * The base URL is product configuration rather than a hardcoded host so a
+ * product that does not publish CLI downloads never contacts a download host.
  */
-export function buildCLIDownloadUrl(os: string, arch: string, quality: string, commit?: string): string {
-	const base = 'https://update.code.visualstudio.com';
+export function buildCLIDownloadUrl(base: string | undefined, os: string, arch: string, quality: string, commit?: string): string | undefined {
+	if (!base) {
+		return undefined;
+	}
 	const artifact = `cli-${os}-${arch}`;
 	if (commit) {
 		// Defense-in-depth: same validation as getRemoteCLIBin so the URL

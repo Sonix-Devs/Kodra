@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Uploads one dictation-runtime tarball to the `main.vscode-cdn.net` storage
+ * Uploads one dictation-runtime tarball to the storage
  * account. Callable as both a library function (`uploadOne(...)`) and a thin CLI.
  *
  * Auth: reads `AZURE_STORAGE_ACCOUNT`, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`,

@@ -2,11 +2,11 @@
 
 ## Audit snapshot
 
-- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–2 scaffold complete)
-- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `b6524ed1` (Stage 2 head on `arena/b9db3fb7-vscode`; Stage 1 merged as `4759c91a`)
-- **Working branch:** `arena/b9db3fb7-vscode`
-- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (new — Android prefix/toolchain docs) plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
-- **Evidence level:** Stage 1: **six** successful GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B). Stage 2: static inventory + toolchain spec only — `kodra/deps/INVENTORY.md` fully triaged (51 deps, 0 unknown), `kodra/TOOLCHAIN.md` + `kodra/prefix-layout.json` define the NDK r26+ `aarch64-linux-android28` build and `$PREFIX`/`$HOME` env. No bionic Node build, no APK, no device run; blob-storage download still blocked by sandbox allowlist.
+- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–2 scaffold complete) → 2026-11-26+ (Stage 3 scaffold)
+- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `b6524ed1` (Stage 2 head) → `arena/4d343e98-vscode` (Stage 3 scaffold; Stage 1 merged as `4759c91a`)
+- **Working branch:** `arena/4d343e98-vscode`
+- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (Android prefix/toolchain docs + `kodra/android/` Gradle scaffold) plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
+- **Evidence level:** Stage 1: **six** successful GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B). Stage 2: static inventory + toolchain spec only — `kodra/deps/INVENTORY.md` fully triaged (51 deps, 0 unknown), `kodra/TOOLCHAIN.md` + `kodra/prefix-layout.json` define the NDK r26+ `aarch64-linux-android28` build and `$PREFIX`/`$HOME` env. Stage 3: Kotlin scaffold only — `kodra/android/` builds `assembleDebug`+`lint` in CI, no device run, no bootstrap assets yet; blob-storage download still blocked by sandbox allowlist.
 
 ## Stage progress
 
@@ -15,7 +15,7 @@
 | 0 — audit and plan | **Complete** | Source map, architecture decisions and owner choices recorded below; Stage 1 was approved. |
 | 1 — rebrand and CI | **Complete (2026-11-26)** | CI builds, asserts and uploads both Linux ARM64 packages, runs each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating, and emits a per-package host inventory. Final green: `45707121359` on `a5831013` (docs-only `cc1bdbbc` follows). Outbound-service review below: every Microsoft host is removed or product-gated and enforced in CI; no network trace available in this sandbox. |
 | 2 — bootstrap | **Complete (scaffold, 2026-11-26)** | `kodra/README.md`, `kodra/BOOTSTRAP.md`, `kodra/TOOLCHAIN.md`, `kodra/prefix-layout.json` and `kodra/deps/INVENTORY.md` (51 deps, 0 unknown: rebuild=5 / replace=2 / omit=2 / binary=42) define the Termux-style `$PREFIX=$HOME` toolchain for NDK r26+ `aarch64-linux-android28` Node 24.22.1. CI gates inventory sync. Stage 1's Linux/glibc REH packages are not Android binaries; actual bionic builds await device CI (Stage 6). |
-| 3 — Android shell | Not started | Kotlin Activity/WebView, service lifecycle, file access and debug APK CI. |
+| 3 — Android shell | **In progress (scaffold, 2026-11-26)** | `kodra/android/` scaffold: `MainActivity` (edge-to-edge WebView, `shouldOverrideUrlLoading` 127.0.0.1 allowlist → external `Intent`), `KodraService` foreground service (partial `WakeLock`, Stop action, per-launch `TokenManager`), `BootstrapInstaller` + `ServerProcess` (redacted `?tkn=`), `FilePickerBridge` (SAF → POSIX, content-only error), `.github/workflows/kodra-android.yml` (`assembleDebug`+`lint`). No NDK assets, no PTY/Git/auth yet (Stages 4–5). |
 | 4 — terminal, Git, GitHub login | Not started | Existing workbench Git UI, bootstrap Git, PTY and native GitHub authentication. |
 | 5 — bundled extensions | Not started | The three pinned JavaScript debug/profile extensions are MIT-licensed; other requested extensions still require separate source, license and notice review. |
 | 6 — touch, release and docs | Not started | Device verification, signing/release workflow and user-facing porting notes. |

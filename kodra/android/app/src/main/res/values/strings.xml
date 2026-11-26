@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Kodra</string>
+    <string name="notification_channel_name">Kodra Server</string>
+    <string name="notification_channel_desc">Keeps the local editor server running</string>
+    <string name="notification_title">Kodra is running</string>
+    <string name="notification_text">Local server on %1$s — tap to open</string>
+    <string name="notification_stop">Stop</string>
+    <string name="err_content_uri">This file provider does not expose a filesystem path. Please choose a file from “Kodra” or device storage, or copy it into /storage/emulated/0/Kodra first.</string>
+    <string name="err_no_browser">No browser app found to open %s</string>
+</resources>

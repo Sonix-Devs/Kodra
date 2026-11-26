@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Minimal gradlew stub — real wrapper jar is fetched by gradle/actions/wrapper-validation in CI.
+# Local dev: install Gradle 8.7 and run gradle wrapper, or use CI artifact.
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$DIR/gradle/wrapper/gradle-wrapper.jar" ]; then
+  exec java -jar "$DIR/gradle/wrapper/gradle-wrapper.jar" "$@"
+else
+  echo "Gradle wrapper jar not present — run: gradle wrapper --gradle-version 8.7  (or use CI)" >&2
+  exit 1
+fi

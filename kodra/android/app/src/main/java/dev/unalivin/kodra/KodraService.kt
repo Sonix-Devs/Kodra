@@ -105,7 +105,7 @@ class KodraService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.sym_def_app_icon) // TODO: replace with Kodra mipmap
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(if (port != 0) getString(R.string.notification_text, "127.0.0.1:$port") else text)
             .setOngoing(true)

@@ -2,11 +2,11 @@
 
 ## Audit snapshot
 
-- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–2 scaffold complete) → 2026-11-26+ (Stage 3 scaffold)
-- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `b6524ed1` (Stage 2 head) → `arena/4d343e98-vscode` (Stage 3 scaffold; Stage 1 merged as `4759c91a`)
+- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–6 scaffold complete)
+- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `4759c91a` (Stage 1 merge) → `ad6be83a` (Stages 2–6 scaffold on `arena/4d343e98-vscode`)
 - **Working branch:** `arena/4d343e98-vscode`
-- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (Android prefix/toolchain docs + `kodra/android/` Gradle scaffold) plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
-- **Evidence level:** Stage 1: **six** successful GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B). Stage 2: static inventory + toolchain spec only — `kodra/deps/INVENTORY.md` fully triaged (51 deps, 0 unknown), `kodra/TOOLCHAIN.md` + `kodra/prefix-layout.json` define the NDK r26+ `aarch64-linux-android28` build and `$PREFIX`/`$HOME` env. Stage 3: Kotlin scaffold only — `kodra/android/` builds `assembleDebug`+`lint` in CI, no device run, no bootstrap assets yet; blob-storage download still blocked by sandbox allowlist.
+- **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (Android prefix/toolchain + `kodra/android/` Kotlin scaffold), `docs/` plus browser workbench/SCM graph.
+- **Evidence level:** Stage 1: **six** GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B, loopback/port-0/token/CSP verified on ARM64 runner). Stages 2–6: **scaffold only** — `kodra/deps/INVENTORY.md` 51 deps 0 unknown, `kodra/TOOLCHAIN.md`/`prefix-layout.json` NDK spec, `kodra/android/` Kotlin scaffold (`assembleDebug`+`lint` workflows), `docs/sample-settings.json`/`EXTENSIONS.md`/`BATTERY.md`/`RELEASE.md`. No bionic Node/NDK build, no signed APK, no device run — all Stage 6 device checklist items remain unverified; sandbox has no Android SDK/NDK/device and blob-storage download blocked.
 
 ## Stage progress
 

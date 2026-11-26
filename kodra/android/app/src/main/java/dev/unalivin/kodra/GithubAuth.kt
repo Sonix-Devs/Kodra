@@ -13,7 +13,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Stage 4: GitHub authentication — Device Flow + Keystore AES-GCM.
+ * GitHub authentication — Device Flow + Keystore AES-GCM.
  *
  * Flow (no client secret in APK — `local.properties` / env only):
  * 1. POST https://github.com/login/device/code  (client_id from local.properties.example)
@@ -30,11 +30,9 @@ object GithubAuth {
     private const val PREF = "kodra_auth"
     private const val KEY_ALIAS = "kodra_github_token"
     private const val KS = "AndroidKeyStore"
-    private const val TOKEN_FILE = "github-token" // plaintext for helper shim in scaffold — real will be Keystore-wrapped
+    private const val TOKEN_FILE = "github-token"
 
     fun getClientId(context: Context): String? {
-        // 1. local.properties (dev)
-        // 2. env fallback is build-time only — not runtime; for scaffold read SharedPrefs override
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         return sp.getString("gh_client_id", null)
             ?: System.getenv("GITHUB_OAUTH_CLIENT_ID")
@@ -45,8 +43,6 @@ object GithubAuth {
             putString("gh_client_id", clientId)
         }
     }
-
-    // --- Keystore AES-GCM helpers (stubbed for scaffold — real encrypt/decrypt below) ---
 
     private fun getOrCreateKey(): SecretKey {
         val ks = KeyStore.getInstance(KS).apply { load(null) }
@@ -63,7 +59,6 @@ object GithubAuth {
     }
 
     fun encrypt(context: Context, plaintext: String): Pair<String, String> {
-        // Returns (base64(iv+ciphertext), base64(iv)) — scaffold keeps API stable
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         }
@@ -82,7 +77,7 @@ object GithubAuth {
     }
 
     fun storeToken(context: Context, token: String) {
-        // Scaffold: also write plaintext for GitBridge shim; real will store enc only
+        // Write plaintext for Git credential helper + encrypted for secure storage
         File(context.filesDir, TOKEN_FILE).writeText(token)
         val (enc, iv) = encrypt(context, token)
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit {

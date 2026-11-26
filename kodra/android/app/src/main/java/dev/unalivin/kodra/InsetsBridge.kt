@@ -36,13 +36,10 @@ object InsetsBridge {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
 
-        // IME resize — WebView already `adjustResize`; this listener lets workbench react
         webView.setOnApplyWindowInsetsListener { _, insets ->
-            val imeVisible = WindowInsetsCompat.toWindowInsetsCompat(insets)
+            WindowInsetsCompat.toWindowInsetsCompat(insets)
                 .isVisible(WindowInsetsCompat.Type.ime())
-            // Workbench's `workbench.html` viewport already handles `visualViewport` resize;
-            // no manual scroll needed — just return insets to propagate.
-            // Future: post message to workbench via WebMessagePort { type: 'insets', imeVisible }
+            // Workbench viewport handles visualViewport resize internally
             insets
         }
     }

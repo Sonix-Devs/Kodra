@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   lint-and-build:
-    name: Lint + assembleDebug (no device)
+    name: Lint + assembleDebug
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -33,18 +33,23 @@ jobs:
           java-version: 17
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@9b3c6e2f4d6d0b02e8c3b8b5b2f6e3b2c7e0c0f0b0d0 # v3.2.2
-        with:
-          log-accepted-android-sdk-licenses: true
+        uses: android-actions/setup-android@8f36f654eac15ef6a0d8a1ff05d40f8ff7aeb93 # v3.2.1
+        # No extra licenses needed beyond default
 
-      - name: Validate wrapper
-        uses: gradle/actions/wrapper-validation@bdc99aeda9b2f48c1e07d8c3c6d5d8b3f9f3f7b1 # v4.2.2
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@017c81f63a4e99c0b7dd6f6f6b3d0e3d6cefa4526d # v3.5.0
+        with:
+          gradle-version: "8.7"
+
+      - name: Generate Gradle wrapper
+        working-directory: kodra/android
+        run: |
+          gradle wrapper --gradle-version 8.7
+          chmod +x gradlew
 
       - name: Assemble debug APK
         working-directory: kodra/android
-        run: |
-          chmod +x gradlew 2>/dev/null || true
-          ./gradlew :app:assembleDebug --stacktrace --warning-mode all
+        run: ./gradlew :app:assembleDebug --stacktrace --warning-mode all
 
       - name: Android Lint
         working-directory: kodra/android

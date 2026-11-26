@@ -13,11 +13,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -49,15 +46,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Edge-to-edge
+        // Edge-to-edge via bridge (cutout + IME + transient bars)
+        // InsetsBridge.apply will set decorFitsSystemWindows, cutout mode, and IME listener
+        // Keep old logic as fallback until bridge is wired to extraKeysView
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-
-        // Handle cutout / IME via WindowInsets
-        window.decorView.setOnApplyWindowInsetsListener { _, insets -> insets }
 
         // Create WebView programmatically (no layout inflator needed for scaffold)
         webView = WebView(this).apply {

@@ -1,15 +1,11 @@
 package dev.unalivin.kodra
 
-import android.app.Activity
 import android.content.ContentResolver
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 
 /**
  * System picker for Open File / Open Folder (SAF). Converts SAF Uris to real POSIX paths

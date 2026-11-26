@@ -2,25 +2,25 @@
 
 ## Audit snapshot
 
-- **Date:** 2026-11-20
-- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0`
+- **Date:** 2026-11-20 (audit) → 2026-11-26 (Stage 1 complete)
+- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `a5831013a3b9fd40b72fa2674e30ec964ceaa741` (Stage 1 head; docs-only `cc1bdbbc` follows with identical artifacts)
 - **Working branch:** `arena/4003317d-vscode`
 - **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, plus the browser workbench and SCM history registration needed to choose a shell and check the requested Git graph.
-- **Evidence level:** static source/configuration inspection, limited local Stage 1 transpile/type-check/server-test evidence, and one successful GitHub Linux ARM64 REH/REH-web build with package checks and artifact uploads. No Kodra APK, Android runtime, or device behavior has been built or tested; local extraction of the uploaded artifact archives was blocked by the sandbox's download-host allowlist.
+- **Evidence level:** static source/configuration inspection, limited local Stage 1 transpile/type-check/server-test evidence, and **six** successful GitHub Linux ARM64 REH/REH-web builds with package checks, origin assertions and artifact uploads (latest `45707121359` on `a5831013`). Host-inventory artifact added (`kodra-host-inventory`, 2,809 B). No Kodra APK, Android runtime, or device behavior has been built or tested; local extraction of the uploaded archives is blocked by the sandbox's download-host allowlist (blob storage host not allowlisted).
 
 ## Stage progress
 
 | Stage | State | Notes |
 | --- | --- | --- |
 | 0 — audit and plan | **Complete** | Source map, architecture decisions and owner choices recorded below; Stage 1 was approved. |
-| 1 — rebrand and CI | **In progress (approved; Linux build and runtime evidence available)** | CI builds, asserts and uploads both Linux ARM64 packages, then runs each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating. The outbound-service review is recorded below: every Microsoft host is removed or product-gated and enforced in CI, with no network trace available in this sandbox. |
+| 1 — rebrand and CI | **Complete (2026-11-26)** | CI builds, asserts and uploads both Linux ARM64 packages, runs each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating, and emits a per-package host inventory. Final green: `45707121359` on `a5831013` (docs-only `cc1bdbbc` follows). Outbound-service review below: every Microsoft host is removed or product-gated and enforced in CI; no network trace available in this sandbox. |
 | 2 — bootstrap | Not started (still paused) | Stage 1's Linux/glibc evidence does not authorize or substitute for Android/bionic runtime work. |
 | 3 — Android shell | Not started | Kotlin Activity/WebView, service lifecycle, file access and debug APK CI. |
 | 4 — terminal, Git, GitHub login | Not started | Existing workbench Git UI, bootstrap Git, PTY and native GitHub authentication. |
 | 5 — bundled extensions | Not started | The three pinned JavaScript debug/profile extensions are MIT-licensed; other requested extensions still require separate source, license and notice review. |
 | 6 — touch, release and docs | Not started | Device verification, signing/release workflow and user-facing porting notes. |
 
-## Stage 1 verification (2026-11-20)
+## Stage 1 verification (2026-11-20 → 2026-11-26 complete)
 
 - `pnpm run transpile-client` passed under Node 24.22.1 (11,888 TypeScript files transpiled; 2,422 non-TypeScript resources copied).
 - A targeted TypeScript check over the modified client/server/product files and their imports passed (3,447 files in the program). `tsc --project build/tsconfig.json --pretty false` also passed.

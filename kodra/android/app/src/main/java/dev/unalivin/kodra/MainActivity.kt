@@ -9,9 +9,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
 import android.view.KeyEvent
+import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -33,7 +35,11 @@ class MainActivity : AppCompatActivity() {
     private var service: KodraService? = null
     private var pendingLoad: Boolean = false
 
-    private val filePicker = FilePickerBridge(this)
+    private lateinit var filePicker: FilePickerBridge
+    private lateinit var workbenchBridge: WorkbenchBridge
+    private var extraKeysView: ExtraKeysView? = null
+
+    fun bridgeView(): android.view.View = webView ?: window.decorView
 
     private val serviceConn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -46,13 +52,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Edge-to-edge via bridge (cutout + IME + transient bars)
-        // InsetsBridge.apply will set decorFitsSystemWindows, cutout mode, and IME listener
-        // Keep old logic as fallback until bridge is wired to extraKeysView
+        filePicker = FilePickerBridge(this)
+        workbenchBridge = WorkbenchBridge(this, filePicker)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Create WebView programmatically (no layout inflator needed for scaffold)
-        webView = WebView(this).apply {
+        val web = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
@@ -61,14 +66,26 @@ class MainActivity : AppCompatActivity() {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
             }
-            // Debug only
             if (BuildConfig.ENABLE_WEBVIEW_DEBUGGING) WebView.setWebContentsDebuggingEnabled(true)
-
             webViewClient = KodraWebClient()
-            // Narrow bridge — no addJavascriptInterface; use WebMessagePort (Stage 3 next)
-            // For scaffold, file picker is via ActivityResultContracts only
         }
-        setContentView(webView)
+        webView = web
+        extraKeysView = ExtraKeysView(this).also { it.attach(web) }
+
+        val container = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(extraKeysView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = android.view.Gravity.BOTTOM
+            })
+        }
+        setContentView(container)
+        InsetsBridge.apply(this, web)
+
+        // Wire WebMessagePort (API 33+; fallback to no-op on older)
+        runCatching {
+            web.addWebMessageListener("kodra", setOf("https://127.0.0.1:*"), workbenchBridge.listener())
+        }
 
         // Start service (or bind to existing)
         KodraService.start(this)
@@ -89,7 +106,6 @@ class MainActivity : AppCompatActivity() {
         if (webView?.url != null || pendingLoad) return
         pendingLoad = true
         val token = TokenManager.readToken(this) ?: return
-        // Loopback-only, token via query (server also checks header/cookie)
         val url = "http://${b.host}:${b.port}/?tkn=${Uri.encode(token)}"
         webView?.loadUrl(url)
     }
@@ -102,7 +118,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Extra-keys row (Esc, Tab, Ctrl, Alt) will be Stage 6; for now delegate to WebView
         if (webView?.canGoBack() == true && keyCode == KeyEvent.KEYCODE_BACK) {
             webView?.goBack()
             return true
@@ -110,15 +125,12 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    /** Only 127.0.0.1 is allowed; everything else goes to system browser via Intent */
     inner class KodraWebClient : WebViewClient() {
         @SuppressLint("QueryPermissionsNeeded")
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
-            if (url.host == "127.0.0.1") return false // let WebView load
-            // Allow webview's blob: / data: for extension webviews (loopback localhost subdomain is also allowed in server)
+            if (url.host == "127.0.0.1") return false
             if (url.scheme == "blob" || url.scheme == "data") return false
-            // External → Intent
             runCatching {
                 startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.onFailure {

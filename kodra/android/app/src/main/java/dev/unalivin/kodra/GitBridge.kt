@@ -23,12 +23,11 @@ object GitBridge {
     fun install(context: Context, layout: BootstrapInstaller.Layout) {
         val bin = File(layout.prefix, "bin")
         val helper = File(bin, HELPER_NAME)
-        // Helper script — reads token from filesDir/github-token (populated by GithubAuth)
         helper.writeText(
             """
             #!/system/bin/sh
             # Kodra Git credential helper — called as: $HELPER_NAME get / store / erase
-            # For scaffold, token is at ${context.filesDir.absolutePath}/github-token
+            # Token at ${context.filesDir.absolutePath}/github-token (written by GithubAuth.storeToken)
             if [ "${'$'}1" = "get" ]; then
               if [ -f "${context.filesDir.absolutePath}/github-token" ]; then
                 echo "username=git"

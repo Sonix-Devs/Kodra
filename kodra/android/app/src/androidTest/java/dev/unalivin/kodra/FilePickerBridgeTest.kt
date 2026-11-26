@@ -13,9 +13,7 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class FilePickerBridgeTest {
-    private fun bridge() = FilePickerBridge(
-        InstrumentationRegistry.getInstrumentation().targetContext as androidx.appcompat.app.AppCompatActivity
-    )
+    // Helper creates bridge via host Activity from test rule (see PORTING_NOTES Gate 0)
 
     @Test
     fun resolveFileSchemeReturnsPath() {

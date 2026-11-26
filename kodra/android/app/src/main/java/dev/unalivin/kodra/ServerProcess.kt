@@ -27,8 +27,7 @@ class ServerProcess(private val context: Context) {
     fun start(tokenFile: File, layout: BootstrapInstaller.Layout): Bound {
         val node = File(layout.prefix, "bin/node")
         val serverJs = File(layout.prefix, "lib/node_modules/kodra-reh/out/server-main.js")
-        // Stage 3 scaffold fallback: if bionic node/reh not yet bundled, use stub that fails fast
-        // (so APK still installs and WebView shows bootstrap-missing error page)
+        // If bionic node/REH not yet bundled (pre-NDK build), fail fast so WebView shows error page
         if (!node.exists() || !serverJs.exists()) {
             Log.w(TAG, "Bootstrap not installed: node=${node.exists()} serverJs=${serverJs.exists()} — serving stub error page via KodraService")
             throw BootstrapMissingException("bootstrap not installed; run Stage 2 NDK build and bundle assets")

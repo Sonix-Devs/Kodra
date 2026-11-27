@@ -59,6 +59,17 @@ log "node target: $NODE_VERSION"
 
 # --- helpers available to recipes -------------------------------------------
 
+log() { printf '[kodra-bootstrap] %s\n' "$*" >&2; }
+
+# The Node version is defined once, in packages/node.sh; node-pty builds its addon
+# against that same tree, so the two can never drift apart. Read after log() exists:
+# this runs at file scope, before any function that could define it has been called.
+NODE_VERSION="$(. "$here/packages/node.sh" >/dev/null 2>&1; printf '%s' "$PKG_VERSION")"
+export NODE_VERSION
+log "node target: $NODE_VERSION"
+
+# --- helpers available to recipes -------------------------------------------
+
 # A few upstream builds execute paths they are about to bake in. git runs
 # $(SHELL_PATH) -c to decide whether the shell is modern enough, and SHELL_PATH has to
 # stay the device path because it ends up in git's installed scripts.
@@ -398,10 +409,6 @@ verify() {
 
 	return "$failed"
 }
-
-# Called once, after every helper exists: an earlier call site would run before
-# prepare_device_paths itself had been defined.
-prepare_device_paths
 
 case "${1:-}" in
 build)

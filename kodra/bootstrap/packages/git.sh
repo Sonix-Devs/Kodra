@@ -23,15 +23,18 @@ build() {
 	pkg_extract "$archive" "$PKG_DIR" >/dev/null || return 1
 	cd "$PKG_DIR/git-$PKG_VERSION" || return 1
 
-	# git's Makefile runs $(SHELL_PATH) -c and refuses to continue when that fails. The
-	# device path holds a build-host shim (build.sh writes it) because the staged bash is
-	# an Android binary the host cannot execute. Fail here with the reason rather than
-	# letting make report an unrelated-looking missing file.
-	if [ ! -x "$KODRA_PREFIX/bin/bash" ]; then
-		ci_error "git" "$KODRA_PREFIX/bin/bash is not executable; staging path broken"
+	GIT_BUILD_SHELL="${GIT_BUILD_SHELL:-/bin/bash}"
+	[ -x "$GIT_BUILD_SHELL" ] || {
+		ci_error "git" "$GIT_BUILD_SHELL is not executable; it is needed only during the build"
 		return 1
-	fi
+	}
 
+	# git's Makefile runs $(SHELL_PATH) -c while parsing and refuses to continue unless a
+	# modern shell answers. SHELL_PATH cannot point at the prefix during the build: the
+	# staged bash is an Android binary whose interpreter is /system/bin/linker64, so the
+	# build host cannot execute it at all. The build therefore uses the host shell and
+	# the installed scripts are rewritten afterwards to the device path — git bakes
+	# SHELL_PATH into them, and /bin/bash does not exist on Android.
 	make -j"$(nproc)" \
 		CC="$CC" AR="$AR" RANLIB="$RANLIB" \
 		CFLAGS="$ANDROID_CFLAGS -O2 -I$KODRA_PREFIX/include" \
@@ -49,7 +52,24 @@ build() {
 		NO_CURL=1 \
 		NO_LIBPCRE=1 \
 		NO_INSTALL_HARDLINKS=1 \
-		SHELL_PATH="$KODRA_PREFIX/bin/bash" \
+		SHELL_PATH="$GIT_BUILD_SHELL" \
 		INSTALL_SYMLINKS=1 \
 		install || return 1
+
+	_rescript_to_device_shell
 }
+
+# Every installed script that names the build host's shell is rewritten to the prefix's
+# bash. Done as a separate step so it is visible in the recipe rather than hidden in a
+# flag, and 'verify' re-checks it inside the Android userland.
+_rescript_to_device_shell() {
+	local f changed=0
+	while IFS= read -r f; do
+		sed -i "1s|^#!${GIT_BUILD_SHELL}\$|#!$KODRA_PREFIX/bin/bash|" "$f"
+		changed=$((changed + 1))
+	done < <(grep -rl "^#!${GIT_BUILD_SHELL}\$" "$KODRA_ROOTFS$KODRA_PREFIX/bin" \
+		"$KODRA_ROOTFS$KODRA_PREFIX/libexec" 2>/dev/null)
+	log_git "rewrote $changed script shebang(s) to $KODRA_PREFIX/bin/bash"
+}
+
+log_git() { printf '[git] %s\n' "$*" >&2; }

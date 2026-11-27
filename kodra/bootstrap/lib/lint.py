@@ -60,7 +60,9 @@ def check_files(problems: list[str]) -> list[Path]:
 
 def check_workflow(problems: list[str]) -> None:
     if not WORKFLOW.exists():
-        report(problems, f"{WORKFLOW.relative_to(ROOT)}: missing")
+        # The probe job checks out only kodra/bootstrap, so the workflow is legitimately
+        # absent there. The build job checks it out and runs this check for real.
+        print("lint: workflow not in this checkout, skipped", file=sys.stderr)
         return
     try:
         import yaml
@@ -95,7 +97,9 @@ def main() -> int:
     check_workflow(problems)
     if problems:
         for problem in problems:
-            print(f"lint: {problem}", file=sys.stderr)
+            # GitHub's annotation syntax, because a step that fails without one cannot be
+            # diagnosed from an environment without log access.
+            print(f"::error title=lint::{problem}", file=sys.stderr)
         return 1
     print("lint: bootstrap scripts and workflow are clean")
     return 0

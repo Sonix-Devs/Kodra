@@ -265,7 +265,10 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: kodra/bootstrap
+          # The workflow file itself is included so the lint step can check it.
+          sparse-checkout: |
+            kodra/bootstrap
+            .github/workflows/kodra-bootstrap.yml
           sparse-checkout-cone-mode: false
 
       - name: Lint the bootstrap scripts and this workflow

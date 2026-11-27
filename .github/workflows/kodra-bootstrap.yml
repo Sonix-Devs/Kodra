@@ -364,7 +364,7 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           prefix="build-out/rootfs/data/data/dev.sonixdevs.kodra/files/usr"
-          if [ -d "$prefix" ]; then
+          if [ -d "$prefix" ] && [ -n "$(ls -A "$prefix" 2>/dev/null)" ]; then
             ( cd "$prefix" && zip -qry "$GITHUB_WORKSPACE/kodra-bootstrap-aarch64.zip" . )
             sha256sum kodra-bootstrap-aarch64.zip | tee -a "$GITHUB_STEP_SUMMARY"
             ls -la "$prefix/bin" | tee -a "$GITHUB_STEP_SUMMARY"

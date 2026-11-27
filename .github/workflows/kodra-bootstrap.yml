@@ -187,10 +187,25 @@ jobs:
               -ex 'run' \
               -ex 'continue' \
               -ex 'bt 12' \
+              -ex 'x/8i $pc-16' \
+              -ex 'info registers x0 x1 x8 x9 sp x30' \
+              -ex 'info proc mappings' \
               -ex 'x/i $pc' \
               -ex 'info symbol $pc' \
               --args "$(command -v chroot)" "$ROOT" "$KODRA_PREFIX/bin/diag-trace" \
               >"$BUILD_ROOT/diag/gdb.log" 2>&1 || true
+            # The first instructions of .text are the crt's _start, so the faulting
+            # instruction can be located in the startup sequence rather than guessed at.
+            {
+              echo '### Startup code (crt _start)'
+              echo '```text'
+              objdump -d --section=.text "$BUILD_ROOT/diag/trace" | head -30
+              echo '### Relocations and dynamic symbols'
+              readelf -rW "$BUILD_ROOT/diag/trace" | head -20
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '::notice title=startup::%s\n' \
+              "$(objdump -d --section=.text "$BUILD_ROOT/diag/trace" | head -14 | tr '\n' '~' | cut -c1-600)"
             cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
             printf '::notice title=backtrace::%s\n' \
               "$(grep -vE '^(\[|Reading|Downloading|warning:)' "$BUILD_ROOT/diag/gdb.log" \

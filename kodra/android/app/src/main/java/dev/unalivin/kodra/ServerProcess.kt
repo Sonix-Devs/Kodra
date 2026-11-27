@@ -19,19 +19,15 @@ class ServerProcess(private val context: Context) {
 
     data class Bound(val host: String, val port: Int)
 
-    // Regex for server print: "Web UI available at http://127.0.0.1:1234/?tkn=..."
-    // and for new remoteExtensionHostAgentServer: "Server bound to 127.0.0.1:1234 (ipv4)"
-    private val webUiPattern = Regex("""https?://(?<host>127\.0\.0\.1):(?<port>\d+)[^\\s]*tkn=""")
+    private val webUiPattern = Regex("""https?://(?<host>127\.0\.0\.1):(?<port>\d+)[^\s]*tkn=""")
     private val boundPattern = Regex("""Server bound to (?<host>\S+):(?<port>\d+)""")
 
     fun start(tokenFile: File, layout: BootstrapInstaller.Layout): Bound {
         val node = File(layout.prefix, "bin/node")
         val serverJs = File(layout.prefix, "lib/node_modules/kodra-reh/out/server-main.js")
-        // Stage 3 scaffold fallback: if bionic node/reh not yet bundled, use stub that fails fast
-        // (so APK still installs and WebView shows bootstrap-missing error page)
         if (!node.exists() || !serverJs.exists()) {
-            Log.w(TAG, "Bootstrap not installed: node=${node.exists()} serverJs=${serverJs.exists()} — serving stub error page via KodraService")
-            throw BootstrapMissingException("bootstrap not installed; run Stage 2 NDK build and bundle assets")
+            Log.w(TAG, "Bootstrap not installed: node=${node.exists()} serverJs=${serverJs.exists()}")
+            throw BootstrapMissingException("bootstrap not installed; run NDK build and bundle assets")
         }
 
         val pb = ProcessBuilder(
@@ -40,9 +36,9 @@ class ServerProcess(private val context: Context) {
             "--host", "127.0.0.1",
             "--port", "0",
             "--connection-token-file", tokenFile.absolutePath,
-            "--without-connection-token", // we use file only; disable stdin token
+            "--without-connection-token",
             "--user-data-dir", File(context.filesDir, "user-data").absolutePath,
-            "--extensions-dir", File(layout.prefix, "lib/node_modules/kodra-reh/extensions").absolutePath
+            "--extensions-dir", File(layout.prefix, "lib/node_modules/kodra-reh/extensions").absolutePath,
         ).apply {
             environment()["HOME"] = layout.home.absolutePath
             environment()["PREFIX"] = layout.prefix.absolutePath
@@ -55,7 +51,6 @@ class ServerProcess(private val context: Context) {
         Log.i(TAG, "Starting ${pb.command().joinToString(" ")}".let(TokenManager::redact))
         proc = pb.start()
 
-        // Wait for bound line (15s) — parse host:port for WebView
         val reader = proc!!.inputStream.bufferedReader()
         val deadline = System.currentTimeMillis() + 15_000
         var line: String?
@@ -65,7 +60,6 @@ class ServerProcess(private val context: Context) {
             Log.i(TAG, redacted)
             (parseBound(line) ?: parseBoundWebUi(line))?.let {
                 bound.set(it)
-                // Keep draining logs on background thread
                 drainInBackground(reader)
                 return it
             }
@@ -87,11 +81,12 @@ class ServerProcess(private val context: Context) {
     private fun drainInBackground(r: BufferedReader) {
         Thread {
             try {
-                var l: String?
-                while (r.readLine().also { l = it } != null) {
-                    Log.i(TAG, TokenManager.redact(l!!))
+                var line: String?
+                while (r.readLine().also { line = it } != null) {
+                    Log.i(TAG, TokenManager.redact(line!!))
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }.also { it.isDaemon = true; it.start() }
     }
 

@@ -56,21 +56,17 @@ readelf -d remote/node_modules/<pkg>/build/Release/*.node | grep NEEDED
 
 `node-pty` additionally needs `termux-pty` shim for `grantpt` on Android.
 
-## Replacements
+## Replacements / omissions
 
-- `kerberos` → **omit** (Enterprise GSSAPI; document as unsupported).
+- `kerberos` → omit (Enterprise GSSAPI; document as unsupported).
 - `@vscode/ripgrep-universal` → build `rg` from `BurntSushi/ripgrep` with NDK and
   install as `$PREFIX/bin/rg`; shim `remote/node_modules/@vscode/ripgrep-universal`
   to call it.
+- `@vscode/windows-process-tree`, `@vscode/windows-registry` → never installed on
+  Android (guarded by `process.platform !== 'win32'` in `extensionHost`).
+- `ms-vscode.cpptools` binaries → do not bundle; bootstrap `clangd`/`lldb` are the replacement.
 
-## Omissions
-
-`@vscode/windows-process-tree`, `@vscode/windows-registry` → never installed on
-Android (guarded by `process.platform !== 'win32'` in `extensionHost`).
-
-## Verification (Stage 6)
-
-Device CI will assert:
+## Verification (device CI)
 
 ```
 $PREFIX/bin/node --version == v24.22.1
@@ -82,7 +78,22 @@ node -e "require('node-pty').spawn('bash',[],{}).onData(()=>{})"  # fork+read
 glibc REH smoke (`build/kodra/smokeTestPackagedServer.ts`) will be duplicated with
 the bionic Node once available; glibc remains reference only.
 
-## Not in this commit
+## Build glue in repo
 
-- No NDK build scripts checked in (only this spec).
-- No Gradle — Stage 3.
+- `build/kodra/bionicBuild.ts` — packages `$PREFIX` → `assets/bootstrap.zip` + `reh-web.tar.gz`, verifies ELF headers (no `ld-linux-aarch64.so.1`, must link `linker64`/`liblog.so`).
+- `kodra/android/` — Gradle project (`kodra-android.yml` `assembleDebug`+`lint`).
+
+Device CI verifies `$PREFIX/bin/node --version` + `bash -c` + `node-pty` smoke.
+No NDK build has run yet — this is the spec plus the packaging glue.
+
+## Bootstrap package manifest (what CI will publish)
+
+`kodra/android/app/src/main/assets/bootstrap.zip` (from `$PREFIX`):
+
+```
+bin/{bash,node,rg,git,ssh,curl,python3,clang,make,cmake,go,gopls,biome,busybox}
+lib/{libnode.so, libgit2.so, ...} + lib/node_modules/kodra-reh/{out/, extensions/, node_modules/ (5 rebuilt)}
+etc/{bash.bashrc, gitconfig, ssh/ssh_config}
+```
+
+`reh-web.tar.gz` is extracted by `BootstrapInstaller.extractRehTar` (pure `GZIPInputStream` + `extractTar`, no `tar` binary).

@@ -28,8 +28,10 @@ Inherited from Termux but rebuilt for Kodra's prefix and signing key:
 | `curl` | extension asset fetch, smoke-test | upstream |
 | `nodejs` | **24.22.1** exact target from `remote/package.json:nativeBuild.target` | nodejs.org dist, **rebuilt for bionic** via `android-ndk r26+` |
 | `python` | `ms-python.python` extension host | 3.11+, `ensurepip` |
-| `clang`, `make`, `cmake` | on-device native builds (optional, Stage 4) | NDK sysroot |
+| `clang`, `make`, `cmake` | on-device native builds + `clangd` for C++ (replaces `ms-vscode.cpptools`) | NDK sysroot |
 | `ripgrep` | `@vscode/ripgrep-universal` replacement | bootstrap-built `rg`, not prebuilt glibc/musl |
+| `go`, `gopls` | `golang.go` extension | upstream `go` + `gopls` built for `aarch64-linux-android` |
+| `biome` | `biomejs.biome` extension | `biomejs/biome` built for `aarch64-linux-android` |
 
 All packages install into `$PREFIX/{bin,lib,etc,tmp}` and must be relocatable
 (`$PREFIX` is baked via `--prefix` at build time and via `termux-elf-cleaner`).
@@ -43,10 +45,10 @@ All packages install into `$PREFIX/{bin,lib,etc,tmp}` and must be relocatable
 - Native addons that require rebuild (from `build/kodra/inventoryNativeDeps.ts`):
   `node-pty`, `@parcel/watcher`, `@vscode/native-watchdog`, `@vscode/spdlog`,
   `@vscode/sqlite3` — each needs `node-gyp` with `android_ndk_path` + bionic `libc`.
-  `kerberos` → **replace** (document loss: Enterprise GSSAPI), `ripgrep-universal` → **replace**
-  with bootstrap `rg`, `windows-*` → **omit**.
+  `kerberos` → replace (document loss: Enterprise GSSAPI), `ripgrep-universal` → replace
+  with bootstrap `rg`, `windows-*` → omit.
 
-## How verification will work (Stage 6, but designed now)
+## How verification will work
 
 1. `kodra` Gradle `assembleDebug` bundles `$PREFIX` as `assets/bootstrap.zip`
 2. Device CI (`ubuntu-24.04-arm` emulator or Firebase) installs APK, extracts prefix,
@@ -56,10 +58,9 @@ All packages install into `$PREFIX/{bin,lib,etc,tmp}` and must be relocatable
    **bionic** Node and rebuilt addons; glibc Linux package remains the reference
    but is not an acceptance gate for bionic.
 
-## Not in this commit
+## Status
 
-- No NDK build scripts yet — only docs + inventory tooling.
-- No Gradle project — that's Stage 3.
-- No `$HOME`/`$PREFIX` Kotlin wiring — also Stage 3.
-
-See `build/kodra/inventoryNativeDeps.ts` for the current Linux→bionic gap.
+Scaffold only — `BootstrapInstaller.kt` exists and has been ktlint-cleaned, but no NDK
+build has run, no `bootstrap.zip`/`reh-web.tar.gz` artifact exists, and no device
+test has passed. See `kodra/TOOLCHAIN.md` for the NDK build spec and
+`kodra/deps/INVENTORY.md` for the 51-dep triage (0 unknown).

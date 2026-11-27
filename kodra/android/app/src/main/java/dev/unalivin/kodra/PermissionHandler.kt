@@ -19,12 +19,12 @@ import androidx.appcompat.app.AppCompatActivity
 class PermissionHandler(private val activity: AppCompatActivity) {
 
     private val requestNotifications = activity.registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* no-op — notification will just not show if denied */ }
+        ActivityResultContracts.RequestPermission(),
+    ) { }
 
     private val manageAllFiles = activity.registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { /* user returns from Settings — check again */ }
+        ActivityResultContracts.StartActivityForResult(),
+    ) { }
 
     fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -34,7 +34,7 @@ class PermissionHandler(private val activity: AppCompatActivity) {
 
     fun hasAllFilesAccess(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
-        else true // targetSdk 28: legacy storage still allows /sdcard/Kodra via WRITE_EXTERNAL_STORAGE
+        else true
 
     fun requestAllFilesAccess() {
         if (!hasAllFilesAccess() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

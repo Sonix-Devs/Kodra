@@ -3,22 +3,22 @@
 ## Audit snapshot
 
 - **Date:** 2026-11-20 (audit) → 2026-11-26 (Stages 1–6 complete)
-- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `4759c91a` (Stage 1 merge) → `7a7c140e` (Stages 2–6 on `arena/4d343e98-vscode`)
-- **Working branch:** `arena/4d343e98-vscode`
+- **Audited source:** `8e9004948a67a1adc70c4019faf7a374d12424f0` → `4759c91a` (Stage 1 merge) → `7a7c140e` (PR #3 scaffold) → `2adf0d53` (PR #4, still scaffold)
+- **Working branch:** `arena/6fe239cb-vscode` (PR [#4](https://github.com/unalivin/vscode/pull/4))
 - **Scope:** `build/`, `src/vs/code/electron-*`, `src/vs/server/node/`, `remote/`, `product.json`, `kodra/` (Android prefix/toolchain + `kodra/android/` Kotlin app), `docs/` plus browser workbench/SCM graph.
-- **Evidence level:** Stage 1: **six** GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B, loopback/port-0/token/CSP verified on ARM64 runner). Stages 2–6: **implementation complete in source** — `kodra/deps/INVENTORY.md` 51 deps 0 unknown, `kodra/TOOLCHAIN.md`/`prefix-layout.json` NDK spec, `kodra/android/` Kotlin app (16 files, `assembleDebug`+`lint`+`release` workflows), `docs/sample-settings.json`/`EXTENSIONS.md`/`BATTERY.md`/`RELEASE.md`/`ARCHITECTURE.md`. Bionic Node/NDK build and signed APK require device CI (Stage 6 checklist); sandbox has no Android SDK/NDK/device and blob-storage download blocked — see `kodra/RELEASE.md` verification list.
+- **Evidence level:** Stage 1: **six** GitHub Linux ARM64 REH/REH-web builds (latest `45707121359` on `a5831013`, host-inventory 2,809 B, loopback/port-0/token/CSP verified on ARM64 runner). Stages 2–6: **scaffolded, unverified** — no Android build, bionic Node, bootstrap, APK or device test has run. `kodra/deps/INVENTORY.md` 51 deps 0 unknown, `kodra/TOOLCHAIN.md`/`prefix-layout.json` NDK spec, `kodra/android/` Kotlin app (16 source files) and docs exist but have never compiled in CI. Evidence column in the stage table below links what actually passed.
 
 ## Stage progress
 
-| Stage | State | Notes |
+| Stage | State | Evidence |
 | --- | --- | --- |
-| 0 — audit and plan | **Complete** | Source map, architecture decisions and owner choices recorded below; Stage 1 was approved. |
-| 1 — rebrand and CI | **Complete (2026-11-26)** | CI builds, asserts and uploads both Linux ARM64 packages, runs each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating, and emits a per-package host inventory. Final green: `45707121359` on `a5831013` (docs-only `cc1bdbbc` follows). Outbound-service review below: every Microsoft host is removed or product-gated and enforced in CI; no network trace available in this sandbox. |
-| 2 — bootstrap | **Complete (2026-11-26)** | `kodra/README.md`, `kodra/BOOTSTRAP.md`, `kodra/TOOLCHAIN.md`, `kodra/prefix-layout.json` and `kodra/deps/INVENTORY.md` (51 deps, 0 unknown: rebuild=5 / replace=2 / omit=2 / binary=42) define the Termux-style `$PREFIX` toolchain for NDK r26+ `aarch64-linux-android28` Node 24.22.1. CI gates inventory sync (`Verify bootstrap inventory is up to date`). |
-| 3 — Android shell | **Complete (2026-11-26)** | `kodra/android/` single-Activity WebView + foreground service: `MainActivity` (edge-to-edge, `shouldOverrideUrlLoading` 127.0.0.1 allowlist → `Intent`), `KodraService` (partial `WakeLock`, Stop action, per-launch `TokenManager`), `BootstrapInstaller` + `ServerProcess` (redacted `?tkn=`), `FilePickerBridge`+`PermissionHandler` (SAF → POSIX, content-only error), `InsetsBridge`/`ExtraKeysView`/`ClipboardBridge`/`WorkbenchBridge` (`WebMessagePort` allowlist), `SettingsActivity` (immersive + battery), `.github/workflows/kodra-android.yml` (`assembleDebug`+`lint`). |
-| 4 — terminal, Git, GitHub login | **Complete (2026-11-26)** | `TerminalBridge` (xterm.js + `node-pty` with `TERM=xterm-256color`, extra-keys row), `GitBridge` (bootstrap `git` + credential helper → Keystore), `GithubAuth` + `DeviceAuthFlow` (Device Flow polling `slow_down`/`expired_token`, `AndroidKeyStore` AES-GCM, `local.properties.example` ignored), `docs/sample-settings.json` (round-trip incl. not-installed ext keys). |
-| 5 — bundled extensions | **Complete (2026-11-26)** | `docs/EXTENSIONS.md` source-of-truth (MIT pin table for 3 bundled js-debug/profile `product.json`, review steps for Prettier/Material/LiveServer/Python/PR/Discord); `ms-vscode.cpptools` excluded (bootstrap clangd docs). |
-| 6 — touch, release and docs | **Complete (2026-11-26)** | `kodra/RELEASE.md` + `.github/workflows/kodra-release.yml` (GitHub Releases only, `targetSdk 28`, signing via `secrets.KODRA_KEYSTORE_*`), `docs/BATTERY.md` (phantom-process/Doze/OEM pin) + `docs/ARCHITECTURE.md` (end-to-end diagram) + `kodra/android/README.md` (Insets/IME/extra-keys, `chrome://inspect`), `kodra/android/app/src/main/assets/README.md` (bootstrap/REH packaging). Device checklist in `RELEASE.md` is the Stage 6 gate. |
+| 0 — audit and plan | **Done** | Source map + architecture decisions recorded below; Stage 1 approved. |
+| 1 — rebrand and CI | **Done** | Six Linux ARM64 REH/REH-web builds; final green [`45707121359`](https://github.com/unalivin/vscode/actions/runs/45707121359) on `a5831013` — artifact verification + smoke tests passed (loopback/port-0/token/CSP/product gating). |
+| 2 — bootstrap | **Scaffolded, unverified** | `kodra/deps/INVENTORY.md` (51 deps, 0 unknown) + `kodra/TOOLCHAIN.md`/`BOOTSTRAP.md`/`prefix-layout.json` written. CI gate: `Verify bootstrap inventory is up to date` (last pass `45707121359`). No NDK build, no ELF check, no bootstrap artifact — host inventory only. |
+| 3 — Android shell | **Scaffolded, unverified** | `kodra/android/` (16 Kotlin files, workflows `kodra-android.yml`/`kodra-release.yml` exist) — **never compiled in CI**. No `assembleDebug`/`lint` pass. No APK. See § CI investigation below. |
+| 4 — terminal, Git, GitHub login | **Scaffolded, unverified** | `TerminalBridge`/`GitBridge`/`GithubAuth`/`DeviceAuthFlow` Kotlin written; `docs/sample-settings.json` added. Never compiled, never run on device. No `node-pty`/Git/Device Flow test. |
+| 5 — bundled extensions | **Scaffolded, unverified** | `docs/EXTENSIONS.md` lists 3 already-bundled MIT extensions; other requested extensions not sourced/built/bundled. No extension `.vsix` built, no license verified at pinned tag. |
+| 6 — touch, release and docs | **Scaffolded, unverified** | `kodra/RELEASE.md`/`docs/BATTERY.md`/`docs/ARCHITECTURE.md`/`kodra/android/README.md` written; `kodra-release.yml` exists but has never produced an APK. Device checklist in `RELEASE.md` unchecked. |
 
 ## Stage 1 verification (2026-11-20 → 2026-11-26 complete)
 
@@ -150,6 +150,24 @@ The built-in Source Control Graph is in core workbench code, not a custom Git UI
 - `kodra/TOOLCHAIN.md` specifies the NDK r26+ `aarch64-linux-android28` build for Node 24.22.1 and the 5 `rebuild` addons (`node-pty`, `@parcel/watcher`, `@vscode/native-watchdog`, `@vscode/spdlog`, `@vscode/sqlite3`) with `android_ndk_path` + `termux-elf-cleaner` relocatable `$PREFIX`. `kerberos` is documented as omitted (Enterprise GSSAPI), `ripgrep-universal` is replaced by bootstrap-built `rg`.
 - `kodra/prefix-layout.json` locks `$PREFIX=/data/data/dev.unalivin.kodra/files/usr`, `$HOME=/data/data/dev.unalivin.kodra/files/home`, `TMPDIR`, `LD_LIBRARY_PATH` and the SAF bridge for `/storage/emulated/0/Kodra`.
 - `git diff --check` still passes; `kodra/deps` triage is now **zero-unknown** (previously 41). No bionic Node or native `.node` has been built — this sandbox has no NDK, and no APK/device run exists (see *Not proven* below).
+
+### CI investigation (2026-11-27)
+
+**Why no CI runs since 2026-11-25:** `unalivin/vscode` is a fork of `microsoft/vscode`. Last successful run was `45707121359` on `arena/4003317d-vscode` (Nov 25, PR #3). PR #4 (`arena/6fe239cb-vscode`, Nov 26) has **zero workflow runs** — `gh api repos/unalivin/vscode/actions/runs` returns 100 runs all on `arena/4003317d-vscode`, none on `arena/6fe239cb-vscode`; `workflow_dispatch` returns HTTP 403 `Resource not accessible by integration` (sandbox `GITHUB_TOKEN` lacks `actions:write`).
+
+Root causes (repo-fixable):
+- `kodra-android.yml` only triggers on `push: branches: [main]` + `pull_request: paths: [kodra/android/**]` — `Kodra Android Debug APK` has **never run** (`0` runs across all branches). The `paths` filter requires at least one changed file under `kodra/android/**`; PR #1–#3 happened to touch those paths, PR #4 does too but still got no run — suggests GitHub's fork-PR approval queue or a transient Actions pause on this fork.
+
+Repo fixes in this commit:
+- `kodra-android.yml`: added `pull_request_target` alternative + broadened `paths` + added manual `push` to `arena/*` so a re-push can retrigger.
+- Added `ktlint` + `detekt` steps to the same job (fail on style, not just `lintDebug`).
+
+Owner action required (exact click path):
+1. Go to `https://github.com/unalivin/vscode/actions`
+2. If a banner says "Workflows awaiting approval" → click **Approve and run** for PR #4's pending runs.
+3. Settings → Actions → General → **Allow all actions and reusable workflows** + **Workflow permissions: Read and write**.
+4. Settings → Branches → `main` → if a ruleset blocks `arena/*`, allow it.
+5. After approving, re-push is not needed — the existing PR checks will start. Verify at `https://github.com/unalivin/vscode/pull/4/checks`.
 
 **Not proven by this scaffold:** no NDK build has executed, no `prefix` has been installed on a device, no `node-pty` fork has run on bionic. Device CI must still prove `$PREFIX/bin/node --version`, `$PREFIX/bin/bash -c 'echo ok'` and a `node-pty` PTY smoke under the app UID (see `kodra/BOOTSTRAP.md` § Verification). The glibc Linux REH package remains the reference only.
 

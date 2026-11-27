@@ -10,9 +10,9 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * GitHub Device Flow — completes TODO in GithubAuth.kt.
- * Network calls are plain HttpURLConnection (no extra dep) and are testable via
- * GithubAuthTest (not in this sandbox). The UI shows user_code + opens verification_uri.
+ * GitHub Device Flow — Device Flow + Keystore AES-GCM (see GithubAuth.kt).
+ * Network calls are plain HttpURLConnection (no extra dep); testable via
+ * GithubAuthTest. The UI shows user_code + opens verification_uri.
  */
 object DeviceAuthFlow {
     data class DeviceCode(
@@ -21,7 +21,7 @@ object DeviceAuthFlow {
         val verificationUri: String,
         val verificationUriComplete: String?,
         val interval: Long,
-        val expiresIn: Long
+        val expiresIn: Long,
     )
     data class TokenResponse(val accessToken: String, val tokenType: String, val scope: String)
 
@@ -32,7 +32,7 @@ object DeviceAuthFlow {
         return DeviceCode(
             o.getString("device_code"), o.getString("user_code"),
             o.getString("verification_uri"), o.optString("verification_uri_complete", null),
-            o.optLong("interval", 5), o.optLong("expires_in", 900)
+            o.optLong("interval", 5), o.optLong("expires_in", 900),
         )
     }
 
@@ -44,9 +44,9 @@ object DeviceAuthFlow {
             val json = post("https://github.com/login/oauth/access_token", bodyBase, "application/json")
             val o = JSONObject(json)
             if (o.has("access_token")) {
-                return TokenResponse(o.getString("access_token"), o.optString("token_type","bearer"), o.optString("scope",""))
+                return TokenResponse(o.getString("access_token"), o.optString("token_type", "bearer"), o.optString("scope", ""))
             }
-            val err = o.optString("error","")
+            val err = o.optString("error", "")
             if (err == "authorization_pending") continue
             if (err == "slow_down") { delay(5000); continue }
             if (err == "expired_token" || err == "unsupported_grant_type") throw IllegalStateException("Device flow $err")

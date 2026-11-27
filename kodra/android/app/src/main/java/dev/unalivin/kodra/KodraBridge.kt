@@ -1,13 +1,9 @@
 package dev.unalivin.kodra
 
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import org.json.JSONObject
-
 /**
- * Narrow, purpose-specific bridge for Stage 6+. NOT exposed as addJavascriptInterface
- * in Stage 3 scaffold — this stub documents the allowed surface and will be wired
- * via WebMessagePort once the workbench extension host handshake is proven.
+ * Narrow, purpose-specific bridge — exposed via WebView.addWebMessageListener
+ * (MainActivity, API 33+). Validates origin (127.0.0.1:*), allowlists methods,
+ * and redacts tokens before reply.
  *
  * Allowed: clipboard read/write (ClipboardManager), openFile/openFolder (SAF),
  * auth (Keystore Device Flow), notification controls, insets/IME hints.
@@ -20,10 +16,6 @@ object KodraBridgeWhiteList {
         "dialog.openFile", "dialog.openFolder",
         "auth.githubDeviceFlow", "auth.getToken", "auth.clearToken",
         "service.stop", "service.reconnect",
-        "insets.get", "insets.setImmersive"
+        "insets.get", "insets.setImmersive",
     )
 }
-
-// Real bridge will be:
-// webView.addWebMessageListener("kodra", setOf("https://127.0.0.1:*"), KodraWebMessageListener())
-// For now, keep surface closed — MainActivity's shouldOverrideUrlLoading is the only bridge.

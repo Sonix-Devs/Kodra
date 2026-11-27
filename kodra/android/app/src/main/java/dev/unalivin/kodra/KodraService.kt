@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -59,14 +60,15 @@ class KodraService : Service() {
                 server = srv
                 val b = srv.start(tf, layout)
                 bound = b
-                wakeLock?.acquire(10 * 60 * 60 * 1000L /*10h*/)
+                wakeLock?.acquire(10 * 60 * 60 * 1000L)
                 startForeground(NOTIF_ID, buildNotification("Kodra is running", b.port))
-                // Broadcast to Activity (if bound, it also polls)
-                sendBroadcast(Intent(ACTION_READY).apply {
-                    setPackage(packageName)
-                    putExtra(EXTRA_PORT, b.port)
-                    putExtra(EXTRA_HOST, b.host)
-                })
+                sendBroadcast(
+                    Intent(ACTION_READY).apply {
+                        setPackage(packageName)
+                        putExtra(EXTRA_PORT, b.port)
+                        putExtra(EXTRA_HOST, b.host)
+                    },
+                )
             } catch (e: ServerProcess.BootstrapMissingException) {
                 startForeground(NOTIF_ID, buildNotification("Bootstrap missing — see logs", 0))
             } catch (e: Exception) {
@@ -80,7 +82,6 @@ class KodraService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        // Ensure foreground even if system kills and recreates (we restart server in onCreate)
         return START_STICKY
     }
 
@@ -89,7 +90,7 @@ class KodraService : Service() {
         server = null
         bound = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        scope.launch { /* cancel children */ }.let { scope.coroutineContext[SupervisorJob]?.cancel() }
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -97,12 +98,12 @@ class KodraService : Service() {
         val openIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stopIntent = PendingIntent.getService(
             this, 1,
             Intent(this, KodraService::class.java).apply { action = ACTION_STOP },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -110,10 +111,12 @@ class KodraService : Service() {
             .setContentText(if (port != 0) getString(R.string.notification_text, "127.0.0.1:$port") else text)
             .setOngoing(true)
             .setContentIntent(openIntent)
-            .addAction(NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.notification_stop), stopIntent
-            ).build())
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    getString(R.string.notification_stop), stopIntent,
+                ).build(),
+            )
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
@@ -126,9 +129,9 @@ class KodraService : Service() {
         const val EXTRA_PORT = "port"
 
         fun start(context: Context) {
-            val i = Intent(context, KodraService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
-            else context.startService(i)
+            val intent = Intent(context, KodraService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+            else context.startService(intent)
         }
     }
 }

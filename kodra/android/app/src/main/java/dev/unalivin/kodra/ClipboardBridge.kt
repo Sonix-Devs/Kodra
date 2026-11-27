@@ -6,10 +6,9 @@ import android.content.Context
 
 /**
  * Clipboard bridge — narrow surface: workbench calls `clipboard.readText` / `writeText`
- * via WebMessagePort (Stage 6), which delegates here. No `addJavascriptInterface` exposure.
+ * via WebMessagePort, which delegates here. No `addJavascriptInterface` exposure.
  *
  * Security: only plain text, no HTML; read requires user gesture (workbench menu / Ctrl+V).
- * Stage 3 scaffold: direct calls; later wired through KodraWebMessageListener.
  */
 object ClipboardBridge {
     fun readText(context: Context): String? {

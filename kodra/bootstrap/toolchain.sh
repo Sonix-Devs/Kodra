@@ -48,6 +48,18 @@ ndk_builtins_dir() {
 	return 1
 }
 
+# clang looks for its runtime and builtin headers relative to its *own* resource
+# directory, so adding the NDK builtins to -L is not enough: the driver still
+# names /usr/lib/llvm-<n>/lib/clang/<n>/lib/linux/libclang_rt.builtins-aarch64-
+# android.a. Pointing --resource-dir at the NDK's clang tree makes the runtime,
+# the builtin headers and the driver agree, and keeps the host's libstdc++ out of
+# an Android link.
+ndk_resource_dir() {
+	local builtins
+	builtins="$(ndk_builtins_dir)" || return 1
+	(cd "$builtins/../.." && pwd -P)
+}
+
 ndk_api_libdir() {
 	local candidate
 	for candidate in "$NDK_SYSROOT/usr/lib/$TARGET_TRIPLE/$ANDROID_API" "$NDK_SYSROOT/usr/lib/$TARGET_TRIPLE"; do
@@ -92,7 +104,7 @@ find_tool() {
 }
 
 write_env() {
-	local clang ar ranlib strip ld_lld libdir builtins
+	local clang ar ranlib strip ld_lld libdir builtins resdir
 	clang="$(find_clang)" || {
 		ci_error "toolchain" "no clang on PATH; install clang via apt"
 		return 1
@@ -109,6 +121,7 @@ write_env() {
 		ci_error "toolchain" "NDK has no compiler-rt builtins tree under $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt"
 		return 1
 	}
+	resdir="$(ndk_resource_dir)" || return 1
 
 	local cxx
 	cxx="$(find_cxx)" || {
@@ -153,8 +166,8 @@ export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin'
 # inherit the host's ld-linux and never start on a device. rpath points at the
 # device prefix, so its lib directory resolves with no LD_LIBRARY_PATH, exactly as
 # Android app binaries do.
-export ANDROID_LDFLAGS='--rtlib=compiler-rt -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
-export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -I$KODRA_PREFIX/include'
+export ANDROID_LDFLAGS='--rtlib=compiler-rt --resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
+export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID --resource-dir=$resdir -I$KODRA_PREFIX/include -isystem $resdir/include'
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'
 export PKG_CONFIG_LIBDIR='$KODRA_PREFIX/lib/pkgconfig'

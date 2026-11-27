@@ -34,7 +34,7 @@ jobs:
           java-version: 17
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@8f36f654eac15ef6a0d8a1ff05d40f8ff7aeb93 # v3.2.1
+        uses: android-actions/setup-android@v3
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@017c81f63a4e99c0b7dd6f6f6b3d0e3d6cefa4526d # v3.5.0

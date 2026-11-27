@@ -39,7 +39,13 @@ build() {
 		bash_cv_printf_a_format=yes \
 		bash_cv_wcwidth_broken=no \
 		bash_cv_unusable_rtsigs=no \
-		bash_cv_must_reinstall_sighandlers=no || return 1
+		bash_cv_must_reinstall_sighandlers=no || {
+		# configure reports only 'the C compiler cannot create executables'; the reason
+		# is in config.log, and this log is the only copy that leaves the runner.
+		ci_error "bash" "configure failed; config.log tail follows"
+		tail -n 25 config.log >&2
+		return 1
+	}
 
 	make -j"$(nproc)" || return 1
 	make install DESTDIR="$KODRA_ROOTFS" || return 1

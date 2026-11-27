@@ -135,6 +135,19 @@ jobs:
               readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|RPATH|RUNPATH' || true
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+
+            # Same toolchain, increasing amounts of libc: localises the fault to the
+            # startup path, the C library calls, or our own code.
+            mkdir -p "$BUILD_ROOT/diag"
+            printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
+            printf '#include <unistd.h>\nint main(void){return getuid()==0?0:1;}\n' > "$BUILD_ROOT/diag/uid.c"
+            printf '#include <stdio.h>\nint main(void){printf("print-ok\\n");return 0;}\n' > "$BUILD_ROOT/diag/print.c"
+            for probe in ret uid print; do
+              "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/$probe.c" -o "$BUILD_ROOT/diag/$probe" $ANDROID_LDFLAGS 2>&1 | sed "s/^/cc-$probe: /" || true
+              cp "$BUILD_ROOT/diag/$probe" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$probe" 2>/dev/null || true
+              r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$probe" 2>&1)" && rc2=0 || rc2=$?
+              echo "diag-$probe rc=$rc2 out=$r" | tee -a "$GITHUB_STEP_SUMMARY"
+            done
           fi
           printf '%s\n' "$out"
           case "$out" in

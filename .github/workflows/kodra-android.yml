@@ -56,7 +56,31 @@ jobs:
 
       - name: Assemble debug APK
         working-directory: kodra/android
-        run: ./gradlew :app:assembleDebug --stacktrace --warning-mode all
+        run: |
+          ./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | tee /tmp/assemble.log
+          ec=\${PIPESTATUS[0]}
+          echo "::group::assemble log tail"
+          tail -n 200 /tmp/assemble.log || true
+          echo "::endgroup::
+"
+          exit \$ec
+
+      - name: Capture assemble failure
+        if: failure()
+        working-directory: kodra/android
+        run: |
+          echo "::group::Gradle failure — last 200 lines"
+          tail -n 200 /tmp/assemble.log 2>&1 || echo "no log"
+          echo "::endgroup::"
+          cat /tmp/assemble.log 2>&1 | tail -n 400 > /tmp/assemble-tail.log || true
+          echo "Assemble failed — see step log above and job summary"
+          {
+            echo "### assembleDebug failure"
+            echo '"
+            echo '```'
+            tail -n 100 /tmp/assemble.log 2>&1 || echo "no log"
+            echo '```'
+          } >> "\$GITHUB_STEP_SUMMARY"
 
       - name: Android Lint
         working-directory: kodra/android

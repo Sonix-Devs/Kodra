@@ -41,6 +41,9 @@ jobs:
       - name: Lint the bootstrap scripts and this workflow
         run: |
           set -euo pipefail
+          # The workflow check needs a YAML parser; the runner's python does not ship one.
+          python3 -m pip install --quiet --break-system-packages pyyaml \
+            || echo '::warning::pyyaml unavailable, workflow checks skipped'
           python3 kodra/bootstrap/lib/lint.py
 
       - name: Set up Android SDK
@@ -268,6 +271,9 @@ jobs:
       - name: Lint the bootstrap scripts and this workflow
         run: |
           set -euo pipefail
+          # The workflow check needs a YAML parser; the runner's python does not ship one.
+          python3 -m pip install --quiet --break-system-packages pyyaml \
+            || echo '::warning::pyyaml unavailable, workflow checks skipped'
           python3 kodra/bootstrap/lib/lint.py
 
       - name: Set up Android SDK

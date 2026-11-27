@@ -36,6 +36,18 @@ NDK_SYSROOT="${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT must point at an installed NDK
 
 # The NDK directory above is named linux-x86_64 even on other hosts; only the
 # `sysroot/` beneath it is used, and that part is host independent.
+# The NDK ships compiler-rt (never libgcc), and it lives in the NDK's own clang
+# resource tree rather than in the sysroot. Host clang defaults to the gcc runtime
+# for this triple and then fails with "unable to find library -lgcc", so the build
+# names the runtime explicitly and adds the directory that holds it.
+ndk_builtins_dir() {
+	local candidate
+	for candidate in "$ANDROID_NDK_ROOT"/toolchains/llvm/prebuilt/*/lib/clang/*/lib/linux; do
+		[ -d "$candidate" ] && printf '%s' "$candidate" && return 0
+	done
+	return 1
+}
+
 ndk_api_libdir() {
 	local candidate
 	for candidate in "$NDK_SYSROOT/usr/lib/$TARGET_TRIPLE/$ANDROID_API" "$NDK_SYSROOT/usr/lib/$TARGET_TRIPLE"; do
@@ -80,7 +92,7 @@ find_tool() {
 }
 
 write_env() {
-	local clang ar ranlib strip ld_lld libdir
+	local clang ar ranlib strip ld_lld libdir builtins
 	clang="$(find_clang)" || {
 		ci_error "toolchain" "no clang on PATH; install clang via apt"
 		return 1
@@ -91,6 +103,10 @@ write_env() {
 	ld_lld="$(find_tool ld.lld ld.lld-18 ld.lld-19)" || return 1
 	libdir="$(ndk_api_libdir)" || {
 		ci_error "toolchain" "NDK sysroot has no aarch64-linux-android libs under $NDK_SYSROOT"
+		return 1
+	}
+	builtins="$(ndk_builtins_dir)" || {
+		ci_error "toolchain" "NDK has no compiler-rt builtins tree under $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt"
 		return 1
 	}
 
@@ -137,7 +153,7 @@ export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin'
 # inherit the host's ld-linux and never start on a device. rpath points at the
 # device prefix, so its lib directory resolves with no LD_LIBRARY_PATH, exactly as
 # Android app binaries do.
-export ANDROID_LDFLAGS='-fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir'
+export ANDROID_LDFLAGS='--rtlib=compiler-rt -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
 export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -I$KODRA_PREFIX/include'
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'

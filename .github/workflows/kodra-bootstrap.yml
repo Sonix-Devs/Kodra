@@ -119,45 +119,44 @@ jobs:
           mkdir -p "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin"
           install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" \
             "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/kodra-probe"
-          # Triage before the assertion: a segfault from bionic's own sh means the
-          # chroot is wrong; a segfault only from our binary means the link is wrong.
           out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe" 2>&1)" && rc=0 || rc=$?
           printf 'probe rc=%s out=%s\n' "$rc" "$out"
           if [ "$rc" != "0" ]; then
-            kodra/bootstrap/android-runtime.sh run /system/bin/sh -c 'echo shell-ok; uname -m' 2>&1 \
-              | sed 's/^/shell: /' | tee -a "$GITHUB_STEP_SUMMARY" || true
-            kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe" 2>&1 \
-              | sed 's/^/probe2: /' | tee -a "$GITHUB_STEP_SUMMARY" || true
+            # A program with no headers and no libc calls still faults before main, so
+            # the fault is in the link, not in the code. Build the same file four ways
+            # and let the one that runs name the cause.
+            mkdir -p "$BUILD_ROOT/diag"
+            printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
+            while IFS='|' read -r name extra; do
+              [ -n "$name" ] || continue
+              # Word splitting on $extra is intended: it carries zero or more flags.
+              if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/$name" \
+                   $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
+                cp "$BUILD_ROOT/diag/$name" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$name"
+                r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$name" 2>&1)" && rc2=0 || rc2=$?
+                printf '::notice title=variant::%s [%s] rc=%s out=%s\n' \
+                  "$name" "$extra" "$rc2" "$(printf '%s' "$r" | head -c 120)"
+              else
+                printf '::notice title=variant::%s [%s] link failed: %s\n' \
+                  "$name" "$extra" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
+              fi
+            done <<'VARIANTS'
+plain|
+base4k|-Wl,-z,max-page-size=4096
+nobti|-mbranch-protection=none
+static|-static
+VARIANTS
             {
               echo '### Probe binary'
               echo '```text'
               readelf -lW "$BUILD_ROOT/toolchain-verify/hello" | grep -i interpreter || echo 'no interpreter'
-              readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|RPATH|RUNPATH' || true
+              readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|SONAME|FLAGS' || true
+              readelf -xW .init_array "$BUILD_ROOT/diag/plain" 2>/dev/null | head -3 || true
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-
-            # Same toolchain, same flags. write(2) is unbuffered, so text that reaches
-            # stdout proves main ran even when the exit path then faults: that separates
-            # a broken startup from a broken exit.
-            mkdir -p "$BUILD_ROOT/diag"
-            printf '#include <unistd.h>\nint main(void){write(1,"BODY",4);_exit(0);}\n' > "$BUILD_ROOT/diag/wr_exit.c"
-            printf '#include <unistd.h>\nint main(void){write(1,"BODY",4);return 0;}\n' > "$BUILD_ROOT/diag/wr_ret.c"
-            for probe in wr_exit wr_ret; do
-              "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/$probe.c" -o "$BUILD_ROOT/diag/$probe" $ANDROID_LDFLAGS 2>&1 | sed "s/^/cc-$probe: /" || true
-              cp "$BUILD_ROOT/diag/$probe" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$probe" 2>/dev/null || true
-              r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$probe" 2>&1)" && rc2=0 || rc2=$?
-              printf '::notice title=diag::%s rc=%s out=%s\n' "$probe" "$rc2" "$(printf '%s' "$r" | head -c 200)"
-              echo "diag-$probe rc=$rc2 out=$r" >> "$GITHUB_STEP_SUMMARY"
-            done
-
-            # Which start files and libraries the driver actually uses: a NULL entry in
-            # .init_array/.fini_array is invisible from the outside but obvious here.
-            printf '::notice title=crt::%s\n' \
-              "$("$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/wr_ret.c" -### $ANDROID_LDFLAGS 2>&1 \
-                 | tr ' ' '\n' | grep -E 'crt[0-9a-zA-Z_]*\.o|libc\.so|libclang_rt|\.fini_array' | tr '\n' ' ' | head -c 400)"
-            readelf -x .fini_array "$BUILD_ROOT/diag/wr_ret" 2>/dev/null | head -4 | sed 's/^/fini: /' | tee -a "$GITHUB_STEP_SUMMARY"
+            ci_error "probe" "kodra-probe faulted: $out"
+            exit 1
           fi
-          printf '%s\n' "$out"
           case "$out" in
             *"kodra-probe ok"*) ci_notice "probe" "bionic execution verified: $out" ;;
             *)

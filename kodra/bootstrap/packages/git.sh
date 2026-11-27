@@ -23,10 +23,10 @@ build() {
 	pkg_extract "$archive" "$PKG_DIR" >/dev/null || return 1
 	cd "$PKG_DIR/git-$PKG_VERSION" || return 1
 
-	# git's Makefile runs $(SHELL_PATH) -c and refuses to continue when that path is
-	# not executable, so the device path has to resolve during the build (build.sh
-	# links it to the staged prefix). Fail here with the reason rather than letting
-	# make report an unrelated-looking missing file.
+	# git's Makefile runs $(SHELL_PATH) -c and refuses to continue when that fails. The
+	# device path holds a build-host shim (build.sh writes it) because the staged bash is
+	# an Android binary the host cannot execute. Fail here with the reason rather than
+	# letting make report an unrelated-looking missing file.
 	if [ ! -x "$KODRA_PREFIX/bin/bash" ]; then
 		ci_error "git" "$KODRA_PREFIX/bin/bash is not executable; staging path broken"
 		return 1

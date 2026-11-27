@@ -59,6 +59,40 @@ log "node target: $NODE_VERSION"
 
 # --- helpers available to recipes -------------------------------------------
 
+# A few upstream builds execute paths they are about to bake in. git runs
+# $(SHELL_PATH) -c to decide whether the shell is modern enough, and SHELL_PATH has to
+# stay the device path because it ends up in git's installed scripts.
+#
+# The staged bash cannot serve that purpose: it is an Android binary whose interpreter
+# is /system/bin/linker64, so the host kernel answers ENOENT when make tries to run it.
+# Instead, a host shim is written at the device path. It exists only on the build host,
+# outside the prefix, and it executes the host's bash — the path git bakes in is the
+# one that is correct on the device, where the real bash is installed.
+prepare_device_paths() {
+	local shim="$KODRA_PREFIX/bin/bash"
+	[ -e "$shim" ] && return 0
+	if ! sudo -n true 2>/dev/null; then
+		ci_notice "device-path" "no passwordless sudo: $KODRA_PREFIX stays unreachable on this host"
+		return 0
+	fi
+	sudo mkdir -p "$(dirname "$shim")"
+	printf '#!/bin/sh\n# Build-host stand-in for the device shell; never shipped.\nexec /bin/bash "$@"\n' \
+		| sudo tee "$shim" >/dev/null
+	sudo chmod 0755 "$shim"
+	ci_notice "device-path" "host shim at $shim runs the build host's bash"
+}
+
+log() { printf '[kodra-bootstrap] %s\n' "$*" >&2; }
+
+# The Node version is defined once, in packages/node.sh; node-pty builds its addon
+# against that same tree, so the two can never drift apart. Read after log() exists:
+# this runs at file scope, before any function that could define it has been called.
+NODE_VERSION="$(. "$here/packages/node.sh" >/dev/null 2>&1; printf '%s' "$PKG_VERSION")"
+export NODE_VERSION
+log "node target: $NODE_VERSION"
+
+# --- helpers available to recipes -------------------------------------------
+
 # A few upstream builds execute paths they are about to bake in. git, for one, runs
 # $(SHELL_PATH) -c to decide whether the shell is modern enough and gives up with
 # 'please_set_SHELL_PATH_to_a_more_modern_shell' when the device path does not exist

@@ -1,4 +1,4 @@
-package dev.unalivin.kodra
+package dev.sonixdevs.kodra
 
 import android.app.Notification
 import android.app.PendingIntent
@@ -120,8 +120,8 @@ class KodraService : Service() {
 
     companion object {
         const val NOTIF_ID = 1001
-        const val ACTION_READY = "dev.unalivin.kodra.READY"
-        const val ACTION_STOP = "dev.unalivin.kodra.STOP"
+        const val ACTION_READY = "dev.sonixdevs.kodra.READY"
+        const val ACTION_STOP = "dev.sonixdevs.kodra.STOP"
         const val EXTRA_HOST = "host"
         const val EXTRA_PORT = "port"
 

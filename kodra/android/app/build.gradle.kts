@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    namespace = "dev.unalivin.kodra"
-    compileSdk = 34
+    namespace = "dev.sonixdevs.kodra"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.unalivin.kodra"
+        applicationId = "dev.sonixdevs.kodra"
         minSdk = 21
         // Owner decision: targetSdk 28, distribute via GitHub Releases (not Play Store).
-        // compileSdk is 34 to get modern WebView/WindowInsets APIs; target remains 28.
+        // compileSdk is 35 to get modern WebView/WindowInsets APIs; target remains 28.
         targetSdk = 28
         versionCode = 1
         versionName = "0.3.0"

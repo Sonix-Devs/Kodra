@@ -51,7 +51,7 @@ not enough; the OEM task manager may force-stop the app even with `FOREGROUND_SE
   Play Review (not relevant since we ship via GitHub Releases, but still wasteful).
 - `WakeLock` is reference-counted `false`, held for 10 h max then re-acquired on
   next Activity bind (so a truly idle Kodra eventually releases after 10 h).
-- Test on Firebase Test Lab / local `emulator -avd` with `adb shell dumpsys activity processes` + `adb shell cmd appops get dev.unalivin.kodra RUN_IN_BACKGROUND`.
+- Test on Firebase Test Lab / local `emulator -avd` with `adb shell dumpsys activity processes` + `adb shell cmd appops get dev.sonixdevs.kodra RUN_IN_BACKGROUND`.
 
 ## Target/compile notes
 

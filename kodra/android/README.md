@@ -21,9 +21,9 @@ kodra/android/
   gradle/wrapper/gradle-wrapper.properties  # Gradle 8.7, AGP 8.5.2, Kotlin 1.9.24
   settings.gradle.kts
   build.gradle.kts            # project
-  app/build.gradle.kts        # applicationId dev.unalivin.kodra, targetSdk 28, compileSdk 34
+  app/build.gradle.kts        # applicationId dev.sonixdevs.kodra, targetSdk 28, compileSdk 35
   app/src/main/AndroidManifest.xml
-  app/src/main/java/dev/unalivin/kodra/*.kt
+  app/src/main/java/dev/sonixdevs/kodra/*.kt
   app/src/main/res/...        # adaptive icon, theme, strings, backup rules
   app/src/main/assets/README.md  # populated by bionicBuild.ts + gulp at build time
   local.properties.example

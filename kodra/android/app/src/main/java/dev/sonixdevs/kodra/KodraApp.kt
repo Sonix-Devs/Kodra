@@ -1,4 +1,4 @@
-package dev.unalivin.kodra
+package dev.sonixdevs.kodra
 
 import android.app.Application
 import android.os.Build

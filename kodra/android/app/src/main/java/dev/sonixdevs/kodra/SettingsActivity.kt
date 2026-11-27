@@ -1,4 +1,4 @@
-package dev.unalivin.kodra
+package dev.sonixdevs.kodra
 
 import android.os.Bundle
 import android.widget.Switch
@@ -34,7 +34,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "See docs/BATTERY.md for battery optimization steps"
             setOnClickListener {
-                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/unalivin/kodra/blob/main/docs/BATTERY.md")))
+                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Sonix-Devs/Kodra/blob/main/docs/BATTERY.md")))
             }
         })
         // Battery optimization intent

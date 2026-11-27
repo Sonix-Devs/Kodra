@@ -1,4 +1,4 @@
-package dev.unalivin.kodra
+package dev.sonixdevs.kodra
 
 import android.content.Context
 import android.content.Intent

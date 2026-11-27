@@ -1,7 +1,7 @@
 {
-  "$comment": "Kodra private prefix layout — Stage 2 source of truth for $PREFIX = /data/data/dev.unalivin.kodra/files/usr",
-  "PREFIX": "/data/data/dev.unalivin.kodra/files/usr",
-  "HOME": "/data/data/dev.unalivin.kodra/files/home",
+  "$comment": "Kodra private prefix layout — Stage 2 source of truth for $PREFIX = /data/data/dev.sonixdevs.kodra/files/usr",
+  "PREFIX": "/data/data/dev.sonixdevs.kodra/files/usr",
+  "HOME": "/data/data/dev.sonixdevs.kodra/files/home",
   "layout": {
     "bin": ["bash", "node", "rg", "git", "ssh", "curl", "python3", "clang", "make", "cmake"],
     "lib/node_modules/kodra-reh": ["out/", "extensions/", "node_modules/ (rebuilt 5: node-pty, @parcel/watcher, @vscode/native-watchdog, @vscode/spdlog, @vscode/sqlite3)"],

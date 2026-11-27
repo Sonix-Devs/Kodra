@@ -1,4 +1,4 @@
-package dev.unalivin.kodra
+package dev.sonixdevs.kodra
 
 import android.content.Context
 import android.system.Os
@@ -9,8 +9,8 @@ import java.io.File
  * on first launch or when versionCode changes. Idempotent: skips if marker matches.
  *
  * Layout (see kodra/prefix-layout.json):
- *   $PREFIX = /data/data/dev.unalivin.kodra/files/usr
- *   $HOME   = /data/data/dev.unalivin.kodra/files/home
+ *   $PREFIX = /data/data/dev.sonixdevs.kodra/files/usr
+ *   $HOME   = /data/data/dev.sonixdevs.kodra/files/home
  *   shared  = /storage/emulated/0/Kodra (SAF bridge, outside prefix)
  */
 object BootstrapInstaller {

@@ -43,7 +43,7 @@ build() {
 		# configure reports only 'the C compiler cannot create executables'; the reason
 		# is in config.log, and this log is the only copy that leaves the runner.
 		ci_error "bash" "configure failed; config.log tail follows"
-		tail -n 25 config.log >&2
+		tail -n 6 config.log >&2
 		return 1
 	}
 

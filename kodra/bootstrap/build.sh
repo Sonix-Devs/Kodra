@@ -205,11 +205,11 @@ install_one() {
 	local log_file="$BUILD_ROOT/logs/$name.log"
 	mkdir -p "$BUILD_ROOT/logs"
 	build >"$log_file" 2>&1 || {
-		ci_annotate_log "build:$name" "$log_file" 'error:|Error [0-9]|fatal error|undefined reference|cannot find|No such file|not found|FAILED|Error:'
-		# Always send the tail too: the real cause is often a line no pattern predicts,
-		# and this log is the only copy that leaves the runner.
-		ci_annotate_tail "build:$name" "$log_file" 6
-		ci_summary "build:$name" "$log_file" 100
+		# One annotation, not twenty: the runner stops publishing annotations after ten
+		# per step, so a chatty failure hides its own cause. The last lines are the
+		# cause, and the full log goes to the summary.
+		ci_error "build:$name" "failed: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-800)"
+		ci_summary "build:$name" "$log_file" 120
 		return 1
 	}
 

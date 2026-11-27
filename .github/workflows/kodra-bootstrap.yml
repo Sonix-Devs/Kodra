@@ -81,7 +81,13 @@ jobs:
           # Export CC/CXX/LDFLAGS/... to later steps through $GITHUB_ENV, which accepts
           # only KEY=VALUE lines — the file's comments must be filtered out or the
           # runner rejects the whole command with "Invalid format".
-          grep '^export ' build-out/toolchain/toolchain.env | sed -e 's/^export //' >> "$GITHUB_ENV"
+          # Values are shell-quoted in the file so it can be sourced locally; $GITHUB_ENV
+          # takes them literally, so the quotes have to come off or every downstream step
+          # would receive ANDROID_API='28' with the quotes baked into the value.
+          grep '^export ' build-out/toolchain/toolchain.env \
+            | sed -e 's/^export //' \
+            | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'\$/\1=\2/" \
+            >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
           cat build-out/toolchain/toolchain.env >> "$GITHUB_STEP_SUMMARY"
           ls -l "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_STEP_SUMMARY"
@@ -185,7 +191,13 @@ jobs:
             ci_annotate_log "toolchain-env" "$RUNNER_TEMP/toolchain.log" '.'
             exit 1
           }
-          grep '^export ' build-out/toolchain/toolchain.env | sed -e 's/^export //' >> "$GITHUB_ENV"
+          # Values are shell-quoted in the file so it can be sourced locally; $GITHUB_ENV
+          # takes them literally, so the quotes have to come off or every downstream step
+          # would receive ANDROID_API='28' with the quotes baked into the value.
+          grep '^export ' build-out/toolchain/toolchain.env \
+            | sed -e 's/^export //' \
+            | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'\$/\1=\2/" \
+            >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
           kodra/bootstrap/android-runtime.sh install > "$RUNNER_TEMP/runtime.log" 2>&1 || {
             ci_annotate_log "android-runtime" "$RUNNER_TEMP/runtime.log" '.'

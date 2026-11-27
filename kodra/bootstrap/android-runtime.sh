@@ -102,6 +102,11 @@ fetch_image() {
 		if url_sum="$(index_lookup "$BUILD_ROOT/sys-img-index.xml" "$pkg")"; then
 			url="${url_sum%% *}"
 			sum="${url_sum##* }"
+			# sys-img indexes publish archive names relative to the index itself.
+			case "$url" in
+			http*) : ;;
+			*) url="$(dirname "$index_url")/$url" ;;
+			esac
 			break
 		fi
 	done

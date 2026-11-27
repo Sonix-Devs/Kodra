@@ -106,8 +106,17 @@ install() {
 	sudo mkdir -p "$ROOT$FILES_DIR"
 	sudo mount --bind "$ROOTFS$FILES_DIR" "$ROOT$FILES_DIR"
 	sudo mount --bind /proc "$ROOT/proc"
-	sudo mount --bind /dev "$ROOT/dev" || ci_notice "android-runtime" "/dev bind failed; PTY tests will need devpts only"
-	sudo mount -t devpts -o newinstance,mode=620 devpts "$ROOT/dev/pts" || ci_notice "android-runtime" "devpts unavailable; node-pty test will be skipped"
+	# --rbind, not --bind: /dev/pts is its own mount, and a plain bind would hide it,
+	# so a PTY could be allocated but never opened. The rslave propagation flag stops
+	# the chroot's mounts from leaking back into the runner.
+	if sudo mount --rbind /dev "$ROOT/dev"; then
+		sudo mount --make-rslave "$ROOT/dev" || true
+	elif sudo mount -t devpts -o newinstance,mode=620 devpts "$ROOT/dev/pts"; then
+		ci_notice "android-runtime" "/dev bind failed; using an isolated devpts"
+	else
+		ci_error "android-runtime" "no /dev and no devpts inside the chroot; the node-pty smoke test cannot run"
+		return 1
+	fi
 
 	# /system/bin/sh exists in the image; prove the chroot is alive and report the
 	# exact bionic build in use so the evidence is concrete.
@@ -125,6 +134,8 @@ run() {
 		PREFIX="$KODRA_PREFIX" \
 		TMPDIR="$KODRA_PREFIX/tmp" \
 		TERM="${TERM:-xterm-256color}" \
+		ANDROID_ROOT=/system \
+		ANDROID_DATA=/data \
 		PATH="$KODRA_PREFIX/bin:/system/bin" \
 		LD_LIBRARY_PATH="$KODRA_PREFIX/lib" \
 		NODE_PATH="$KODRA_PREFIX/lib/node_modules" \

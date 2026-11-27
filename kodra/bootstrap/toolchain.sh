@@ -166,8 +166,8 @@ export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin'
 # inherit the host's ld-linux and never start on a device. rpath points at the
 # device prefix, so its lib directory resolves with no LD_LIBRARY_PATH, exactly as
 # Android app binaries do.
-export ANDROID_LDFLAGS='--rtlib=compiler-rt --resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
-export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID --resource-dir=$resdir -I$KODRA_PREFIX/include -isystem $resdir/include'
+export ANDROID_LDFLAGS='--rtlib=compiler-rt -resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
+export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -resource-dir=$resdir -I$KODRA_PREFIX/include -isystem $resdir/include'
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'
 export PKG_CONFIG_LIBDIR='$KODRA_PREFIX/lib/pkgconfig'

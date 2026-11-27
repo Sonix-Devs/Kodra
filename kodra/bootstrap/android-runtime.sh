@@ -10,16 +10,16 @@
 #
 # So this script installs the genuine article: /system/bin/linker64 and /system/lib64
 # copied out of an official arm64 Android system image, inside a chroot at their real
-# paths. Kodra's $PREFIX is bind-mounted at its real device path inside that chroot,
-# so binaries find their own rpath and behave exactly as they will on the device.
+# paths. Kodra's prefix is bind-mounted at its real device path inside that chroot, so
+# binaries find their own rpath and behave exactly as they will on the device.
 #
 # CPU is the runner's own aarch64 core; nothing is emulated. The kernel is the
-# runner's Linux kernel, which is the same syscall surface bionic targets. This is
-# not a substitute for a device — Play services, SELinux and OEM kernels are absent —
-# but it does execute the real linker, the real libc and the real binaries.
+# runner's Linux kernel, which is the same syscall surface bionic targets. This is not
+# a substitute for a device — SELinux, Play services and OEM kernels are absent — but
+# it does execute the real linker, the real libc and the real binaries.
 #
 # Usage:
-#   android-runtime.sh install            # download image, build the chroot
+#   android-runtime.sh install            # fetch an image, build the chroot
 #   android-runtime.sh run <cmd...>       # run a command inside the chroot
 #   android-runtime.sh shell -c <script>  # run through /system/bin/sh
 set -euo pipefail
@@ -37,56 +37,116 @@ KODRA_PREFIX="${KODRA_PREFIX:-/data/data/dev.sonixdevs.kodra/files/usr}"
 # beside the prefix and git, npm and ssh all write into it.
 FILES_DIR="$(dirname "$KODRA_PREFIX")"
 KODRA_HOME="$FILES_DIR/home"
-# Candidates are tried in order; arm64 images are not published for every API/flavour
-# combination, and the first one that installs is the one used.
-IMAGE_CANDIDATES="${IMAGE_CANDIDATES:-system-images;android-${ANDROID_API};default;arm64-v8a system-images;android-${ANDROID_API};google_apis;arm64-v8a system-images;android-30;google_apis;arm64-v8a system-images;android-31;google_apis;arm64-v8a}"
+# Candidates are tried in order: arm64 images are not published for every API and
+# flavour combination, and the first one that downloads is the one used.
+IMAGE_CANDIDATES="${IMAGE_CANDIDATES:-system-images;android-${ANDROID_API};default;arm64-v8a system-images;android-${ANDROID_API};google_apis;arm64-v8a system-images;android-30;google_apis;arm64-v8a}"
 
-sdkmanager_bin() {
-	if command -v sdkmanager >/dev/null 2>&1; then
-		command -v sdkmanager
-	elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-		printf '%s' "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-	else
+mkdir -p "$BUILD_ROOT"
+
+log() { printf '[kodra-runtime] %s\n' "$*"; }
+
+# Android system images ship in libsparse format, which the kernel cannot loop-mount.
+# The converter is a no-op on an already-raw image, so it is safe to call always.
+desparse() {
+	local path="$1" out
+	out="$(python3 "$here/lib/sparse2raw.py" "$path")" || {
+		ci_error "android-runtime" "could not convert $path from sparse to raw"
 		return 1
-	fi
+	}
+	[ -n "$out" ] && log "$out"
+	return 0
 }
 
-# Android system images may ship system.img in Android's sparse format, which cannot be
-# mounted or read by debugfs. lib/sparse2raw.py converts it in place and is a no-op when
-# the image is already raw.
-desparse() {
-	python3 "$here/lib/sparse2raw.py" "$1"
+# Google publishes every system image in a repository index together with its
+# checksum. Reading that index directly avoids `sdkmanager`, which treats the emulator
+# package as a hard dependency of each image (about a gigabyte that a chroot never
+# runs) and fails when it cannot resolve it.
+index_lookup() {
+	local index_file="$1" wanted="$2"
+	python3 - "$index_file" "$wanted" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+index_file, wanted = sys.argv[1], sys.argv[2]
+try:
+    root = ET.parse(index_file).getroot()
+except ET.ParseError as exc:
+    sys.exit(f"unparseable index: {exc}")
+
+for package in root.iter("remotePackage"):
+    if package.get("path") != wanted:
+        continue
+    for archive in package.iter("archive"):
+        host_os = (archive.findtext("host-os") or "any").strip()
+        if host_os not in ("any", "linux"):
+            continue
+        url = archive.findtext("complete/url")
+        checksum = archive.findtext("complete/checksum")
+        if url and checksum:
+            print(url, checksum)
+            sys.exit(0)
+sys.exit(1)
+PY
+}
+
+fetch_image() {
+	local pkg="$1" index_url url_sum url sum image_dir tmp actual found
+	url=""
+	# AOSP ("default") and Google APIs images live in separate index files.
+	for index_url in \
+		"https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml" \
+		"https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-1.xml" \
+		"https://dl.google.com/android/repository/sys-img/android/sys-img2-3.xml" \
+		"https://dl.google.com/android/repository/sys-img/android/sys-img2-1.xml"; do
+		curl -fsSL --retry 2 -o "$BUILD_ROOT/sys-img-index.xml" "$index_url" 2>/dev/null || continue
+		if url_sum="$(index_lookup "$BUILD_ROOT/sys-img-index.xml" "$pkg")"; then
+			url="${url_sum%% *}"
+			sum="${url_sum##* }"
+			break
+		fi
+	done
+	[ -n "$url" ] || return 1
+
+	# The package path maps onto sdkmanager's on-disk layout, so the rest of the
+	# script does not care how the image arrived.
+	image_dir="${ANDROID_HOME:-/usr/local/lib/android/sdk}/system-images/$(printf '%s' "$pkg" | cut -d';' -f2-4 | tr ';' '/')"
+	tmp="$BUILD_ROOT/sys-img.zip"
+	log "downloading $url"
+	curl -fsSL --retry 3 -o "$tmp" "$url" || return 1
+	actual="$(sha1sum "$tmp" | cut -d' ' -f1)"
+	[ "$actual" = "$sum" ] || {
+		ci_error "android-runtime" "system image checksum mismatch: expected $sum, got $actual"
+		return 1
+	}
+	mkdir -p "$(dirname "$image_dir")"
+	unzip -q -o "$tmp" -d "$(dirname "$image_dir")" || return 1
+	if [ ! -f "$image_dir/system.img" ]; then
+		# Some archives unpack as <flavour>/<abi>/; find the image instead of guessing.
+		found="$(find "$(dirname "$image_dir")" -maxdepth 3 -name system.img -print -quit)"
+		[ -n "$found" ] || {
+			ci_error "android-runtime" "no system.img inside $tmp"
+			return 1
+		}
+		image_dir="$(dirname "$found")"
+	fi
+	IMAGE_DIR="$image_dir"
+	ci_notice "android-runtime" "system image: $pkg -> $image_dir"
 }
 
 install() {
-	local smgr image found=""
-	smgr="$(sdkmanager_bin)" || {
-		ci_error "android-runtime" "sdkmanager not found; android-actions/setup-android must run first"
-		return 1
-	}
-	yes | "$smgr" --licenses >/dev/null 2>&1 || true
+	local image found=""
 	for image in $IMAGE_CANDIDATES; do
-		if "$smgr" --install "$image" >"$BUILD_ROOT/sdkmanager.log" 2>&1; then
+		if fetch_image "$image"; then
 			found="$image"
 			break
 		fi
 	done
 	[ -n "$found" ] || {
-		ci_annotate_log "android-runtime" "$BUILD_ROOT/sdkmanager.log" 'Warning|Error|error'
+		ci_error "android-runtime" "no arm64 system image could be downloaded; tried: $IMAGE_CANDIDATES"
 		return 1
 	}
-	ci_notice "android-runtime" "system image: $found"
 
-	local image_dir img
-	image_dir="${ANDROID_HOME:-/usr/local/lib/android/sdk}/system-images/$(printf '%s' "$found" | cut -d';' -f2-5 | tr ';' '/')"
-	if [ ! -d "$image_dir" ]; then
-		image_dir="$(dirname "$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/system-images" -name system.img -print -quit)")"
-	fi
-	img="$image_dir/system.img"
-	[ -f "$img" ] || {
-		ci_error "android-runtime" "system.img not found under $image_dir"
-		return 1
-	}
+	local img="$IMAGE_DIR/system.img"
 	desparse "$img"
 
 	# The chroot is a directory tree whose /system is the image itself.
@@ -100,15 +160,15 @@ install() {
 		return 1
 	}
 
-	# Device paths inside the chroot: files/ keeps its real path so rpath and
-	# baked-in configuration resolve without wrappers.
+	# Device paths inside the chroot: files/ keeps its real path so rpath and baked-in
+	# configuration resolve without wrappers.
 	mkdir -p "$ROOTFS$KODRA_PREFIX" "$ROOTFS$KODRA_HOME" "$ROOTFS$KODRA_PREFIX/tmp"
 	sudo mkdir -p "$ROOT$FILES_DIR"
 	sudo mount --bind "$ROOTFS$FILES_DIR" "$ROOT$FILES_DIR"
 	sudo mount --bind /proc "$ROOT/proc"
-	# --rbind, not --bind: /dev/pts is its own mount, and a plain bind would hide it,
-	# so a PTY could be allocated but never opened. The rslave propagation flag stops
-	# the chroot's mounts from leaking back into the runner.
+	# --rbind, not --bind: /dev/pts is its own mount and a plain bind would hide it, so
+	# a PTY could be allocated and never opened. rslave stops the chroot's mounts from
+	# propagating back into the runner.
 	if sudo mount --rbind /dev "$ROOT/dev"; then
 		sudo mount --make-rslave "$ROOT/dev" || true
 	elif sudo mount -t devpts -o newinstance,mode=620 devpts "$ROOT/dev/pts"; then
@@ -118,11 +178,11 @@ install() {
 		return 1
 	fi
 
-	# /system/bin/sh exists in the image; prove the chroot is alive and report the
-	# exact bionic build in use so the evidence is concrete.
-	local probe
-	probe="$(sudo chroot "$ROOT" /system/bin/linker64 --version 2>&1 | head -2 || true)"
-	ci_notice "android-runtime" "linker: ${probe//$'\n'/ }"
+	# Report the exact bionic build in use, so the evidence names a real linker rather
+	# than an assumption.
+	local linker_version
+	linker_version="$(sudo chroot "$ROOT" /system/bin/linker64 --version 2>&1 | head -2 || true)"
+	ci_notice "android-runtime" "linker: ${linker_version//$'\n'/ }"
 }
 
 run() {

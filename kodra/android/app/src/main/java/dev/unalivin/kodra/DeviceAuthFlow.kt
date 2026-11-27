@@ -10,8 +10,8 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * GitHub Device Flow — completes TODO in GithubAuth.kt.
- * Network calls are plain HttpURLConnection (no extra dep) and are testable via
+ * GitHub Device Flow — Device Flow + Keystore AES-GCM (see GithubAuth.kt).
+ * Network calls are plain HttpURLConnection (no extra dep); testable via
  * GithubAuthTest. The UI shows user_code + opens verification_uri.
  */
 object DeviceAuthFlow {

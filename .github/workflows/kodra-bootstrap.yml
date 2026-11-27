@@ -136,19 +136,26 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
 
-            # Same toolchain, increasing amounts of libc: localises the fault to the
-            # startup path, the C library calls, or our own code.
+            # Same toolchain, same flags. write(2) is unbuffered, so text that reaches
+            # stdout proves main ran even when the exit path then faults: that separates
+            # a broken startup from a broken exit.
             mkdir -p "$BUILD_ROOT/diag"
-            printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
-            printf '#include <unistd.h>\nint main(void){return getuid()==0?0:1;}\n' > "$BUILD_ROOT/diag/uid.c"
-            printf '#include <stdio.h>\nint main(void){printf("print-ok\\n");return 0;}\n' > "$BUILD_ROOT/diag/print.c"
-            for probe in ret uid print; do
+            printf '#include <unistd.h>\nint main(void){write(1,"BODY",4);_exit(0);}\n' > "$BUILD_ROOT/diag/wr_exit.c"
+            printf '#include <unistd.h>\nint main(void){write(1,"BODY",4);return 0;}\n' > "$BUILD_ROOT/diag/wr_ret.c"
+            for probe in wr_exit wr_ret; do
               "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/$probe.c" -o "$BUILD_ROOT/diag/$probe" $ANDROID_LDFLAGS 2>&1 | sed "s/^/cc-$probe: /" || true
               cp "$BUILD_ROOT/diag/$probe" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$probe" 2>/dev/null || true
               r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$probe" 2>&1)" && rc2=0 || rc2=$?
-              printf '::notice title=diag::%s rc=%s out=%s\n' "$probe" "$rc2" "$r"
+              printf '::notice title=diag::%s rc=%s out=%s\n' "$probe" "$rc2" "$(printf '%s' "$r" | head -c 200)"
               echo "diag-$probe rc=$rc2 out=$r" >> "$GITHUB_STEP_SUMMARY"
             done
+
+            # Which start files and libraries the driver actually uses: a NULL entry in
+            # .init_array/.fini_array is invisible from the outside but obvious here.
+            printf '::notice title=crt::%s\n' \
+              "$("$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/wr_ret.c" -### $ANDROID_LDFLAGS 2>&1 \
+                 | tr ' ' '\n' | grep -E 'crt[0-9a-zA-Z_]*\.o|libc\.so|libclang_rt|\.fini_array' | tr '\n' ' ' | head -c 400)"
+            readelf -x .fini_array "$BUILD_ROOT/diag/wr_ret" 2>/dev/null | head -4 | sed 's/^/fini: /' | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           printf '%s\n' "$out"
           case "$out" in

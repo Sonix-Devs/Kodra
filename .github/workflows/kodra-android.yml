@@ -34,7 +34,10 @@ jobs:
           java-version: 17
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          # Use sdkmanager directly - android-actions/setup-android may be the blocker
+          echo "y" | sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5 || true
+          sdkmanager --list_installed 2>&1 | head -10 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@017c81f63a4e99c0b7dd6f6f6b3d0e3d6cefa4526d # v3.5.0

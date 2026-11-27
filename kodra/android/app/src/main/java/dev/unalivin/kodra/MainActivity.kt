@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private var extraKeysView: ExtraKeysView? = null
 
     fun bridgeView(): android.view.View = webView ?: window.decorView
+    fun webViewForBridge(): android.view.View = webView ?: window.decorView
 
     private val serviceConn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -74,24 +75,30 @@ class MainActivity : AppCompatActivity() {
 
         val container = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            addView(extraKeysView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                gravity = android.view.Gravity.BOTTOM
-            })
+            addView(
+                web,
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+            )
+            addView(
+                extraKeysView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM
+                },
+            )
         }
         setContentView(container)
         InsetsBridge.apply(this, web)
 
-        // Wire WebMessagePort (API 33+; fallback to no-op on older)
         runCatching {
             web.addWebMessageListener("kodra", setOf("https://127.0.0.1:*"), workbenchBridge.listener())
         }
 
-        // Start service (or bind to existing)
         KodraService.start(this)
         bindService(Intent(this, KodraService::class.java), serviceConn, Context.BIND_AUTO_CREATE)
 
-        // Retry load until service is ready (server takes ~1-3s)
         lifecycleScope.launch {
             repeat(30) {
                 delay(800)

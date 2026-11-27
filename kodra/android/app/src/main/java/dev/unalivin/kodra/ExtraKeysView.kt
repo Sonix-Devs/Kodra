@@ -11,17 +11,13 @@ import com.google.android.material.button.MaterialButton
 /**
  * Extra-keys row (Esc, Tab, Ctrl, Alt, arrows) above the soft keyboard.
  *
- * Stage 6 acceptance: long-press context menus, pinch zoom, extra-keys row,
- * hardware shortcuts, IME composition, edge-to-edge/cutouts, keyboard-driven resize.
- *
  * This view is inflated as an overlay above `MainActivity`'s WebView and sends
  * synthetic `KeyEvent`s to the WebView's `dispatchKeyEvent`. Ctrl/Alt are sticky
  * modifiers (toggle) — next key is sent with META_CTRL_ON / META_ALT_ON.
- *
- * Scaffold: UI wiring only; WebView must be `focusable` and `requestFocus()` before dispatch.
  */
 class ExtraKeysView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null
+    context: Context,
+    attrs: AttributeSet? = null,
 ) : HorizontalScrollView(context, attrs) {
 
     private var ctrlHeld = false
@@ -53,21 +49,24 @@ class ExtraKeysView @JvmOverloads constructor(
     fun attach(webView: WebView) { this.webView = webView }
 
     private fun addKey(label: String, keyCode: Int) {
-        row.addView(MaterialButton(context, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
-            text = label
-            setOnClickListener {
-                sendKey(keyCode)
-                // Ctrl/Alt are one-shot sticky — clear after next key
-                if (ctrlHeld || altHeld) { ctrlHeld = false; altHeld = false; updateToggles() }
-            }
-        })
+        row.addView(
+            MaterialButton(context, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
+                text = label
+                setOnClickListener {
+                    sendKey(keyCode)
+                    if (ctrlHeld || altHeld) { ctrlHeld = false; altHeld = false; updateToggles() }
+                }
+            },
+        )
     }
 
     private fun addToggle(label: String, onClick: (MaterialButton) -> Unit) {
-        row.addView(MaterialButton(context, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
-            text = label
-            setOnClickListener { onClick(this) }
-        })
+        row.addView(
+            MaterialButton(context, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
+                text = label
+                setOnClickListener { onClick(this) }
+            },
+        )
     }
 
     private fun updateToggles() {
@@ -81,7 +80,7 @@ class ExtraKeysView @JvmOverloads constructor(
         val wv = webView ?: return
         wv.requestFocus()
         val meta = (if (ctrlHeld) KeyEvent.META_CTRL_ON else 0) or
-                (if (altHeld) KeyEvent.META_ALT_ON else 0)
+            (if (altHeld) KeyEvent.META_ALT_ON else 0)
         val down = KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, meta)
         val up = KeyEvent(0, 0, KeyEvent.ACTION_UP, keyCode, 0, meta)
         wv.dispatchKeyEvent(down)

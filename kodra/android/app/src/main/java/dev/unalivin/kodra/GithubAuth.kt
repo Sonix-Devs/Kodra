@@ -53,7 +53,7 @@ object GithubAuth {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
-                .build()
+                .build(),
         )
         return kg.generateKey()
     }
@@ -77,7 +77,6 @@ object GithubAuth {
     }
 
     fun storeToken(context: Context, token: String) {
-        // Write plaintext for Git credential helper + encrypted for secure storage
         File(context.filesDir, TOKEN_FILE).writeText(token)
         val (enc, iv) = encrypt(context, token)
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit {
@@ -88,14 +87,16 @@ object GithubAuth {
 
     fun loadToken(context: Context): String? {
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        val enc = sp.getString("gh_token_enc", null) ?: return File(context.filesDir, TOKEN_FILE).takeIf { it.exists() }?.readText()
+        val enc = sp.getString("gh_token_enc", null)
+            ?: return File(context.filesDir, TOKEN_FILE).takeIf { it.exists() }?.readText()
         val iv = sp.getString("gh_token_iv", null) ?: return null
         return runCatching { decrypt(context, enc, iv) }.getOrNull()
     }
 
     fun clearToken(context: Context) {
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit {
-            remove("gh_token_enc"); remove("gh_token_iv")
+            remove("gh_token_enc")
+            remove("gh_token_iv")
         }
         File(context.filesDir, TOKEN_FILE).delete()
     }

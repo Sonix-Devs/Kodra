@@ -31,7 +31,6 @@ class FilePickerBridge(private val activity: AppCompatActivity) {
 
     fun pickFile(callback: Callback) {
         pending = callback
-        // Generic — server will filter; Stage 6 may add mime-type allowlist
         openFile.launch(arrayOf("*/*"))
     }
 
@@ -42,14 +41,18 @@ class FilePickerBridge(private val activity: AppCompatActivity) {
 
     private fun handle(uri: Uri?, cb: Callback?) {
         if (uri == null || cb == null) return
-        // Persist permission so server can read across restarts
         runCatching {
-            activity.contentResolver.takePersistableUriPermission(uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            activity.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
         }
         val path = resolveToPath(activity, uri)
-        if (path != null) cb.onPicked(Result.success(path))
-        else cb.onPicked(Result.failure(ContentUriException(activity.getString(R.string.err_content_uri))))
+        if (path != null) {
+            cb.onPicked(Result.success(path))
+        } else {
+            cb.onPicked(Result.failure(ContentUriException(activity.getString(R.string.err_content_uri))))
+        }
     }
 
     /**
@@ -59,23 +62,19 @@ class FilePickerBridge(private val activity: AppCompatActivity) {
     fun resolveToPath(context: Context, uri: Uri): String? {
         if (uri.scheme == "file") return uri.path
         if (!DocumentsContract.isDocumentUri(context, uri)) {
-            // Non-document content:// — try _data column, else fail explicitly
             return queryDataColumn(context.contentResolver, uri)
         }
         val docId = DocumentsContract.getDocumentId(uri)
-        // ExternalStorageProvider
         if (isExternalStorageDocument(uri)) {
             val split = docId.split(":")
             val type = split[0]
             val rel = split.getOrNull(1) ?: ""
             if (type == "primary") return "/storage/emulated/0/$rel"
-            // SD card: /storage/<type>/$rel — check if mounted
             val sd = "/storage/$type/$rel"
             if (java.io.File(sd).exists()) return sd
         }
-        // DownloadsProvider / MediaProvider — try _data
         return queryDataColumn(context.contentResolver, uri)
-            ?: queryDisplayNameFallback(context, uri) // still content-only → null to force error
+            ?: queryDisplayNameFallback(context, uri)
     }
 
     private fun queryDataColumn(cr: ContentResolver, uri: Uri): String? = runCatching {
@@ -83,13 +82,17 @@ class FilePickerBridge(private val activity: AppCompatActivity) {
             if (c.moveToFirst()) {
                 val idx = c.getColumnIndex("_data")
                 if (idx >= 0) c.getString(idx)?.takeIf { it.isNotBlank() } else null
-            } else null
+            } else {
+                null
+            }
         }
     }.getOrNull()
 
-    private fun queryDisplayNameFallback(context: Context, uri: Uri): String? = null // explicit: no path → error
+    @Suppress("UNUSED_PARAMETER")
+    private fun queryDisplayNameFallback(context: Context, uri: Uri): String? = null
 
-    private fun isExternalStorageDocument(uri: Uri) = "com.android.externalstorage.documents" == uri.authority
+    private fun isExternalStorageDocument(uri: Uri) =
+        "com.android.externalstorage.documents" == uri.authority
 
     class ContentUriException(msg: String) : IllegalArgumentException(msg)
 }

@@ -12,9 +12,6 @@ import java.io.File
  *   `git.path = $PREFIX/bin/git` (via default settings + user settings.json)
  *   `PATH = $PREFIX/bin:...` (BootstrapInstaller.busyBoxEnv)
  *
- * Credential helper: `git config --global credential.helper '!f() { echo \"username=oauth\"; echo \"password=$(cat $FILES/token)\"; }; f'`
- * is wrong — we use a real helper that reads Keystore (see GithubAuth) and prints `password=<token>`.
- *
  * This Kotlin file installs the helper script and configures `git config` on first launch.
  */
 object GitBridge {
@@ -34,18 +31,17 @@ object GitBridge {
                 echo "password=$(cat "${context.filesDir.absolutePath}/github-token")"
               fi
             fi
-            """.trimIndent()
+            """.trimIndent(),
         )
         helper.setExecutable(true)
 
         val git = File(bin, "git")
-        if (!git.exists()) return // NDK bootstrap not yet installed — helper will be used on next launch
+        if (!git.exists()) return
         runCatching {
             ProcessBuilder(git.absolutePath, "config", "--global", "credential.helper", helper.absolutePath)
                 .apply { environment()["HOME"] = layout.home.absolutePath }
                 .start().waitFor()
         }
-        // Also set safe.directory for /storage/emulated/0/Kodra (owner's shared projects)
         runCatching {
             ProcessBuilder(git.absolutePath, "config", "--global", "--add", "safe.directory", "/storage/emulated/0/Kodra")
                 .apply { environment()["HOME"] = layout.home.absolutePath }

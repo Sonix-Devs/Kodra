@@ -1,9 +1,5 @@
 package dev.unalivin.kodra
 
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import org.json.JSONObject
-
 /**
  * Narrow, purpose-specific bridge — exposed via WebView.addWebMessageListener
  * (MainActivity, API 33+). Validates origin (127.0.0.1:*), allowlists methods,
@@ -20,8 +16,6 @@ object KodraBridgeWhiteList {
         "dialog.openFile", "dialog.openFolder",
         "auth.githubDeviceFlow", "auth.getToken", "auth.clearToken",
         "service.stop", "service.reconnect",
-        "insets.get", "insets.setImmersive"
+        "insets.get", "insets.setImmersive",
     )
 }
-
-// Wired in MainActivity.onCreate via WorkbenchBridge.listener()

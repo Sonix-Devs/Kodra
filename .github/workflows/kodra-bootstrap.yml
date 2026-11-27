@@ -151,29 +151,34 @@ jobs:
               printf '::notice title=variant::bare link failed: %s\n' "$(head -c 200 "$BUILD_ROOT/diag/bare.err" | tr '\n' ' ')"
             fi
 
-            # A NULL call before main, with working bare-syscall code, is what an
-            # unapplied relocation looks like: the GOT entry stays zero and the first
-            # call through it faults at 0x0. API 28's linker predates DT_RELR, so ask
-            # for each relocation encoding and report which ones the binary carries.
-            for spec in "plain|" "dynnone|-Wl,--pack-dyn-relocs=none" "dynandroid|-Wl,--pack-dyn-relocs=android"; do
-              name="${spec%%|*}"
-              extra="${spec#*|}"
-              # Word splitting on $extra is intended: zero or more link flags.
-              if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/$name" \
-                   $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
-                cp "$BUILD_ROOT/diag/$name" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$name"
-                r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$name" 2>&1)" && rc2=0 || rc2=$?
-                # grep exits 1 when a binary carries no packed relocations at all,
-                # which is itself a result; set -e must not treat it as a failure.
-                tags="$(readelf -dW "$BUILD_ROOT/diag/$name" \
-                  | grep -oE 'DT_(RELR|ANDROID_REL|RELRSZ|RELACOUNT)[A-Z]*' | tr '\n' ',' || true)"
-                printf '::notice title=variant::%s rc=%s tags=[%s] out=%s\n' \
-                  "$name" "$rc2" "$tags" "$(printf '%s' "$r" | head -c 100)"
-              else
-                printf '::notice title=variant::%s link failed: %s\n' \
-                  "$name" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
-              fi
-            done
+            # A NULL call before main with working bare-syscall code is a startup
+            # problem, not a relocation one (the binaries carry no packed relocations at
+            # all). gdb runs natively here — the runner and the target are both aarch64 —
+            # and is told the chroot is its sysroot, so bionic's libraries resolve.
+            gdb_trace() {
+              local binary="$1"
+              sudo gdb -q -batch \
+                -ex "set sysroot $ROOT" \
+                -ex "set solib-absolute-prefix $ROOT" \
+                -ex "set solib-search-path $ROOT/system/lib64" \
+                -ex 'set pagination off' \
+                -ex 'set confirm off' \
+                -ex 'catch exec' \
+                -ex 'run' \
+                -ex 'continue' \
+                -ex 'bt 12' \
+                -ex 'x/i $pc' \
+                -ex 'info symbol $pc' \
+                --args "$(command -v chroot)" "$ROOT" "$binary" 2>&1
+            }
+            if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/trace" \
+                 $ANDROID_LDFLAGS 2>/dev/null; then
+              cp "$BUILD_ROOT/diag/trace" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-trace"
+              trace="$(gdb_trace "$KODRA_PREFIX/bin/diag-trace" \
+                | grep -vE '^(\[|Reading|Downloading|warning:)' | tail -25 || true)"
+              printf '::notice title=backtrace::%s\n' "$(printf '%s' "$trace" | tr '\n' '~' | head -c 900)"
+              printf '%s\n' "$trace" >> "$GITHUB_STEP_SUMMARY"
+            fi
             {
               echo '### Probe binary'
               echo '```text'

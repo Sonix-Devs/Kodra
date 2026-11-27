@@ -35,6 +35,22 @@ ci_notice() {
 	printf '::notice title=%s::%s\n' "$title" "$message"
 }
 
+# ci_annotate_tail <title> <file> [lines] — the last lines of a log as annotations.
+#
+# Pattern matching misses a lot in practice: 'make' reports a missing header, curl
+# reports TLS failure, and a recipe can exit with nothing at all. When that is the
+# only copy of the output a maintainer will ever see, the tail must always be sent.
+ci_annotate_tail() {
+	local title="$1"
+	local file="$2"
+	local lines="${3:-8}"
+	[ -s "$file" ] || return 0
+	while IFS= read -r line; do
+		[ -n "$line" ] && ci_error "$title" "$line"
+	done < <(tail -n "$lines" "$file")
+	return 0
+}
+
 # ci_annotate_log <title> <file> [pattern] — first N matching lines become annotations.
 ci_annotate_log() {
 	local title="$1"

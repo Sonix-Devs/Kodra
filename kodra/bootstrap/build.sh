@@ -187,6 +187,9 @@ install_one() {
 	mkdir -p "$BUILD_ROOT/logs"
 	build >"$log_file" 2>&1 || {
 		ci_annotate_log "build:$name" "$log_file" 'error:|Error [0-9]|fatal error|undefined reference|cannot find|No such file|not found|FAILED|Error:'
+		# Always send the tail too: the real cause is often a line no pattern predicts,
+		# and this log is the only copy that leaves the runner.
+		ci_annotate_tail "build:$name" "$log_file" 6
 		ci_summary "build:$name" "$log_file" 100
 		return 1
 	}

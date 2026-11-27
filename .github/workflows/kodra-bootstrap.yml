@@ -78,9 +78,10 @@ jobs:
             ci_annotate_log "toolchain-env" "$RUNNER_TEMP/toolchain.log" '.'
             exit 1
           fi
-          # Export CC/CXX/LDFLAGS/... to later steps through $GITHUB_ENV. Values are
-          # single-quoted paths and flags only; nothing that needs shell evaluation.
-          sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"
+          # Export CC/CXX/LDFLAGS/... to later steps through $GITHUB_ENV, which accepts
+          # only KEY=VALUE lines — the file's comments must be filtered out or the
+          # runner rejects the whole command with "Invalid format".
+          grep '^export ' build-out/toolchain/toolchain.env | sed -e 's/^export //' >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
           cat build-out/toolchain/toolchain.env >> "$GITHUB_STEP_SUMMARY"
           ls -l "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_STEP_SUMMARY"
@@ -109,8 +110,9 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "android-exec"
-          mkdir -p "$BUILD_ROOT/prefix/bin"
-          install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" "$BUILD_ROOT/prefix/bin/kodra-probe"
+          mkdir -p "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin"
+          install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" \
+            "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/kodra-probe"
           out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe")"
           printf '%s\n' "$out"
           case "$out" in
@@ -183,7 +185,7 @@ jobs:
             ci_annotate_log "toolchain-env" "$RUNNER_TEMP/toolchain.log" '.'
             exit 1
           }
-          sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"
+          grep '^export ' build-out/toolchain/toolchain.env | sed -e 's/^export //' >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
           kodra/bootstrap/android-runtime.sh install > "$RUNNER_TEMP/runtime.log" 2>&1 || {
             ci_annotate_log "android-runtime" "$RUNNER_TEMP/runtime.log" '.'

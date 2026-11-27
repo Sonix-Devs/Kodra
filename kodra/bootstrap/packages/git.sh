@@ -8,7 +8,10 @@
 PKG_VERSION=2.47.1
 # kernel.org is the canonical source and publishes sha256sums.txt alongside it.
 PKG_URL="https://www.kernel.org/pub/software/scm/git/git-$PKG_VERSION.tar.gz"
-PKG_SHA256=PIN
+# kernel.org publishes sha256sums.txt next to the tarballs, but it is not reachable
+# from the development sandbox; this is the digest the build observed over TLS
+# (`build.sh pin`) and is enforced from then on.
+PKG_SHA256=f4c4e98667800585d218dfdf415eb72f73baa7abcac4569e2ce497970f8d6665
 
 build() {
 	local archive

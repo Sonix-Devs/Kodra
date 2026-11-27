@@ -26,9 +26,11 @@ build() {
 		--prefix="$KODRA_PREFIX" \
 		--without-bash-malloc \
 		--disable-nls \
-		--enable-static-link=no \
 		CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-		CFLAGS="$ANDROID_CFLAGS -O2" \
+		# HAVE_UNISTD_H: bash's bundled termcap compiles with its own include list, and
+		# without this its tparam.c calls write() with no prototype — an error in C99 and
+		# later, not a warning. Android does have unistd.h.
+		CFLAGS="$ANDROID_CFLAGS -O2 -DHAVE_UNISTD_H=1" \
 		LDFLAGS="$ANDROID_LDFLAGS" \
 		bash_cv_getcwd_malloc=yes \
 		bash_cv_job_control_missing=present \

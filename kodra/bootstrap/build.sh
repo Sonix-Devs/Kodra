@@ -286,8 +286,12 @@ install_one() {
 		# annotations, so both views go into this single message: what the build called an
 		# error, and where it stopped.
 		local errors
-		errors="$(grep -aE '(error:|Error [0-9]|fatal error|undefined reference|cannot find|No such file)' "$log_file" \
-			| tail -n 6 | tr '\n' '~' | cut -c1-700)"
+		# make's own 'Error 1' lines come last and would push the linker's message out of
+		# the window, so they are filtered from the error list; the tail below still shows
+		# where the build stopped.
+		errors="$(grep -aE '(error:|error: |Error [0-9]|fatal error|undefined reference|cannot find|No such file)' "$log_file" \
+			| grep -av 'make\[[0-9]*\]: \*\*\*' | grep -av '^make: \*\*\*' \
+			| tail -n 5 | tr '\n' '~' | cut -c1-700)"
 		ci_error "build:$name" "failed. errors: ${errors:-none matched} | tail: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-400)"
 		ci_summary "build:$name" "$log_file" 120
 		return 1

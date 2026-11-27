@@ -19,6 +19,12 @@ ci_error() {
 	printf '::error title=%s::%s\n' "$title" "$message"
 }
 
+# ci_trap <title> — report the exact failing command of an unguarded step.
+ci_trap() {
+	local title="${1:-step}"
+	trap 'ci_error "'"$title"'" "failed command: $BASH_COMMAND"' ERR
+}
+
 ci_notice() {
 	local title="$1"
 	shift
@@ -68,7 +74,16 @@ ci_run() {
 	local rc=0
 	"$@" >"$log" 2>&1 || rc=$?
 	[ "$rc" -eq 0 ] && return 0
+	local matched
+	matched="$(grep -cE 'error:|Error|fatal|FAILED|not found|cannot|No such file' "$log" 2>/dev/null || true)"
 	ci_annotate_log "$title" "$log"
+	# A failure whose text matches no pattern would otherwise be invisible from an
+	# environment without log access, so the tail is always emitted.
+	if [ "${matched:-0}" -eq 0 ]; then
+		while IFS= read -r line; do
+			[ -n "$line" ] && ci_error "$title" "$line"
+		done < <(tail -n 8 "$log")
+	fi
 	ci_summary "$title (failed, exit $rc)" "$log" 80
 	return "$rc"
 }

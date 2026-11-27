@@ -53,6 +53,7 @@ jobs:
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
+          ci_trap "ndk"
           for ndk in "ndk;27.2.12479018" "ndk;26.3.11579264"; do
             if sdkmanager --install "$ndk" >"$RUNNER_TEMP/ndk.log" 2>&1; then
               version="${ndk#ndk;}"
@@ -69,16 +70,24 @@ jobs:
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
-          ci_run "toolchain" "$RUNNER_TEMP/toolchain.log" -- kodra/bootstrap/toolchain.sh env
-          # Export CC/CXX/LDFLAGS/... to later steps through GITHUB_ENV.
+          ci_trap "toolchain-env"
+          kodra/bootstrap/toolchain.sh env > "$RUNNER_TEMP/toolchain.log" 2>&1 || {
+            ci_run "toolchain" "$RUNNER_TEMP/toolchain.log" -- true
+            exit 1
+          }
+          # Export CC/CXX/LDFLAGS/... to later steps through $GITHUB_ENV. Values are
+          # single-quoted paths and flags only; nothing that needs shell evaluation.
           sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
           cat build-out/toolchain/toolchain.env >> "$GITHUB_STEP_SUMMARY"
+          ls -l "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the compiler emits Android binaries
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
+          ci_trap "toolchain-verify"
           ci_run "toolchain-verify" "$RUNNER_TEMP/verify.log" -- kodra/bootstrap/toolchain.sh verify
           file build-out/toolchain-verify/hello | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -87,6 +96,7 @@ jobs:
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
+          ci_trap "android-runtime"
           ci_run "android-runtime" "$RUNNER_TEMP/runtime.log" -- kodra/bootstrap/android-runtime.sh install
           tail -n 20 "$RUNNER_TEMP/runtime.log" >> "$GITHUB_STEP_SUMMARY"
 
@@ -95,6 +105,7 @@ jobs:
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
+          ci_trap "android-exec"
           mkdir -p "$BUILD_ROOT/prefix/bin"
           install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" "$BUILD_ROOT/prefix/bin/kodra-probe"
           out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe")"

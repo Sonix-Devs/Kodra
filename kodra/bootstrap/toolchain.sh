@@ -128,7 +128,10 @@ export AR='$ar'
 export RANLIB='$ranlib'
 export STRIP='$strip'
 export LD='$ld_lld'
-export PATH='$TOOLCHAIN_DIR/bin:'"\$PATH"
+# No PATH entry here: this file is consumed line-by-line through $GITHUB_ENV, which
+# does not evaluate quoting, so a PATH line would corrupt the runner's PATH. CI puts
+# $TOOLCHAIN_DIR/bin on PATH itself, and every script calls the wrappers by full path.
+export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin' 
 # Bionic's dynamic linker path is fixed on Android; without it the binary would
 # inherit the host's /lib/ld-linux-aarch64.so.1 and never start on a device.
 # rpath points at the device prefix so $PREFIX/lib resolves on the device with no

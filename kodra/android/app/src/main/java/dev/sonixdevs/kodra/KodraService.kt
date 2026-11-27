@@ -24,7 +24,8 @@ import java.io.File
  * Reconnect: onBind returns same binder; server is not restarted on config change.
  */
 class KodraService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(job + Dispatchers.IO)
     private var wakeLock: PowerManager.WakeLock? = null
     private var server: ServerProcess? = null
     private var bound: ServerProcess.Bound? = null
@@ -59,6 +60,9 @@ class KodraService : Service() {
                 server = srv
                 val b = srv.start(tf, layout)
                 bound = b
+                // The bootstrap git must know the shared project folder before the
+                // built-in Git extension starts asking it questions.
+                GitBridge.configure(this@KodraService, layout)
                 wakeLock?.acquire(10 * 60 * 60 * 1000L /*10h*/)
                 startForeground(NOTIF_ID, buildNotification("Kodra is running", b.port))
                 // Broadcast to Activity (if bound, it also polls)
@@ -89,7 +93,9 @@ class KodraService : Service() {
         server = null
         bound = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        scope.launch { /* cancel children */ }.let { scope.coroutineContext[SupervisorJob]?.cancel() }
+        // Cancelling the parent job also stops an in-flight bootstrap install or a
+        // server hand-shake loop; the scope must not outlive the service.
+        job.cancel()
         super.onDestroy()
     }
 

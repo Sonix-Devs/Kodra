@@ -172,12 +172,17 @@ jobs:
                 --args "$(command -v chroot)" "$ROOT" "$binary" 2>&1
             }
             if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/trace" \
-                 $ANDROID_LDFLAGS 2>/dev/null; then
+                 $ANDROID_LDFLAGS 2>"$BUILD_ROOT/diag/trace.err"; then
               cp "$BUILD_ROOT/diag/trace" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-trace"
-              trace="$(gdb_trace "$KODRA_PREFIX/bin/diag-trace" \
-                | grep -vE '^(\[|Reading|Downloading|warning:)' | tail -25 || true)"
-              printf '::notice title=backtrace::%s\n' "$(printf '%s' "$trace" | tr '\n' '~' | head -c 900)"
-              printf '%s\n' "$trace" >> "$GITHUB_STEP_SUMMARY"
+              gdb_trace "$KODRA_PREFIX/bin/diag-trace" >"$BUILD_ROOT/diag/gdb.log" 2>&1 || true
+              bytes="$(wc -c <"$BUILD_ROOT/diag/gdb.log")"
+              tail="$(grep -vE '^(\[|Reading|Downloading|warning:)' "$BUILD_ROOT/diag/gdb.log" \
+                | tr '\n' '~' | head -c 900)"
+              printf '::notice title=backtrace::bytes=%s %s\n' "$bytes" "${tail:-<empty>}"
+              cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf '::notice title=backtrace::build failed: %s\n' \
+                "$(head -c 200 "$BUILD_ROOT/diag/trace.err" | tr '\n' ' ')"
             fi
             {
               echo '### Probe binary'

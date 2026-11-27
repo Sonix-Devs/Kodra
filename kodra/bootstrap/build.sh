@@ -287,7 +287,7 @@ install_one() {
 		# error, and where it stopped.
 		local errors
 		errors="$(grep -aE '(error:|Error [0-9]|fatal error|undefined reference|cannot find|No such file)' "$log_file" \
-			| tail -n 3 | tr '\n' '~' | cut -c1-400)"
+			| tail -n 6 | tr '\n' '~' | cut -c1-700)"
 		ci_error "build:$name" "failed. errors: ${errors:-none matched} | tail: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-400)"
 		ci_summary "build:$name" "$log_file" 120
 		return 1

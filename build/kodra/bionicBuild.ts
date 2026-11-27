@@ -64,17 +64,21 @@ export function buildBionic(prefixDir: string, outDir: string): void {
         console.warn(`REH dir ${rehDir} not found — skipping reh-web.tar.gz`);
     }
 
-    // ELF verification
+    // ELF verification — fail CI on any glibc linkage
     verifyElf(nodeBin);
-    for (const addon of ['@parcel/watcher', '@vscode/native-watchdog', '@vscode/spdlog', '@vscode/sqlite3', 'node-pty']) {
-        const pattern = path.join(prefixDir, `lib/node_modules/kodra-reh/node_modules/${addon}/**/*.node`);
-        // Use find for verification
-        const r = spawnSync(`find ${prefixDir}/lib -name "*.node" -exec sh -c 'readelf -d "$1" | grep -q ld-linux && echo BAD:$1 || echo OK:$1' _ {} \\;`, {
-            shell: true,
-            encoding: 'utf8',
-        });
-        if (r.stdout) console.log(r.stdout.trim());
-        break; // only once
+    {
+        const r = spawnSync(
+            `find ${prefixDir}/lib -name "*.node" -exec sh -c 'readelf -d "$1" 2>/dev/null | grep -q ld-linux \&\& echo BAD:$1 || echo OK:$1' _ {} \;`,
+            { shell: true, encoding: 'utf8' },
+        );
+        if (r.stdout) {
+            const lines = r.stdout.trim().split("
+").filter(Boolean);
+            for (const line of lines) {
+                console.log(line);
+                if (line.startsWith("BAD:")) throw new Error(`glibc-linked addon: ${line}`);
+            }
+        }
     }
 }
 

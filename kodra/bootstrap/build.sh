@@ -72,9 +72,14 @@ prepare_device_paths() {
 		ci_notice "device-path" "no passwordless sudo: $KODRA_PREFIX stays unreachable on this host"
 		return 0
 	fi
-	sudo mkdir -p "$parent/files/usr"
-	if ! sudo mount --bind "$PREFIX_DIR" "$parent/files/usr" 2>/dev/null; then
-		sudo ln -sfn "$PREFIX_DIR" "$parent/files/usr"
+	sudo mkdir -p "$parent/files"
+	# A bind mount is nicer (no symlink for upstream tools to trip over) but workflow
+	# containers usually refuse it. The fallback must be `ln -T`: given an existing
+	# directory, plain `ln -s target dir` creates `dir/target` instead of replacing it,
+	# and every path under it then points at a directory that is not the prefix.
+	if ! { sudo mkdir -p "$parent/files/usr" && sudo mount --bind "$PREFIX_DIR" "$parent/files/usr"; } 2>/dev/null; then
+		sudo rmdir "$parent/files/usr" 2>/dev/null || true
+		sudo ln -sfnT "$PREFIX_DIR" "$parent/files/usr"
 	fi
 	if [ -e "$KODRA_PREFIX/etc/kodra/packages" ] || [ -x "$KODRA_PREFIX/bin/bash" ]; then
 		ci_notice "device-path" "$KODRA_PREFIX resolves to $PREFIX_DIR"

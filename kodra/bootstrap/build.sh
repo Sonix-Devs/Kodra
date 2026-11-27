@@ -45,7 +45,6 @@ PREFIX_DIR="$ROOTFS$KODRA_PREFIX"
 
 # Source, install and keep-out directories.
 mkdir -p "$CACHE" "$PREFIX_DIR"/{bin,etc/kodra/packages,include,lib,libexec,share,tmp,var/log}
-prepare_device_paths
 
 # log goes to stderr: recipes do `archive="$(pkg_fetch ...)"`, and anything printed on
 # stdout would be captured into the variable instead of shown to the maintainer.
@@ -342,6 +341,10 @@ verify() {
 
 	return "$failed"
 }
+
+# Called once, after every helper exists: an earlier call site would run before
+# prepare_device_paths itself had been defined.
+prepare_device_paths
 
 case "${1:-}" in
 build)

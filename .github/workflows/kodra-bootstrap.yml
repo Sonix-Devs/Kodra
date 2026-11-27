@@ -122,87 +122,91 @@ jobs:
           out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe" 2>&1)" && rc=0 || rc=$?
           printf 'probe rc=%s out=%s\n' "$rc" "$out"
           if [ "$rc" != "0" ]; then
-            # A program with no headers and no libc calls still faults before main, so
-            # the fault is in the link, not in the code. Build the same file four ways
-            # and let the one that runs name the cause.
-            mkdir -p "$BUILD_ROOT/diag"
-            printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
-            # Freestanding: no libc, no crt, raw syscalls. If this runs, the linker and
-            # the Android loader execute our code and only libc startup can be at fault.
-            # No heredoc here on purpose: YAML strips only the block's own indentation,
-            # so a heredoc terminator would keep two spaces and never terminate.
-            printf '%s\n' \
-              'void _start(void) {' \
-              '  register long x0 __asm__("x0") = 1;' \
-              '  register const char *x1 __asm__("x1") = "BARE";' \
-              '  register long x2 __asm__("x2") = 4;' \
-              '  register long x8 __asm__("x8") = 64;' \
-              '  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x1), "r"(x2), "r"(x8) : "memory");' \
-              '  x0 = 0; x8 = 93;' \
-              '  __asm__ volatile("svc #0" :: "r"(x0), "r"(x8));' \
-              '  __builtin_unreachable();' \
-              '}' > "$BUILD_ROOT/diag/bare.c"
-            if "$CC" -nostdlib -static -Wl,-e,_start "$BUILD_ROOT/diag/bare.c" \
-                 -o "$BUILD_ROOT/diag/bare" 2>"$BUILD_ROOT/diag/bare.err"; then
-              cp "$BUILD_ROOT/diag/bare" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-bare"
-              r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-bare" 2>&1)" && rc2=0 || rc2=$?
-              printf '::notice title=variant::bare rc=%s out=%s\n' "$rc2" "$(printf '%s' "$r" | head -c 120)"
-            else
-              printf '::notice title=variant::bare link failed: %s\n' "$(head -c 200 "$BUILD_ROOT/diag/bare.err" | tr '\n' ' ')"
-            fi
-
-            # A NULL call before main with working bare-syscall code is a startup
-            # problem, not a relocation one (the binaries carry no packed relocations at
-            # all). gdb runs natively here — the runner and the target are both aarch64 —
-            # and is told the chroot is its sysroot, so bionic's libraries resolve.
-            gdb_trace() {
-              local binary="$1"
-              sudo gdb -q -batch \
-                -ex "set sysroot $ROOT" \
-                -ex "set solib-absolute-prefix $ROOT" \
-                -ex "set solib-search-path $ROOT/system/lib64" \
-                -ex 'set pagination off' \
-                -ex 'set confirm off' \
-                -ex 'catch exec' \
-                -ex 'run' \
-                -ex 'continue' \
-                -ex 'bt 12' \
-                -ex 'x/i $pc' \
-                -ex 'info symbol $pc' \
-                --args "$(command -v chroot)" "$ROOT" "$binary" 2>&1
-            }
-            if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/trace" \
-                 $ANDROID_LDFLAGS 2>"$BUILD_ROOT/diag/trace.err"; then
-              cp "$BUILD_ROOT/diag/trace" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-trace"
-              gdb_trace "$KODRA_PREFIX/bin/diag-trace" >"$BUILD_ROOT/diag/gdb.log" 2>&1 || true
-              bytes="$(wc -c <"$BUILD_ROOT/diag/gdb.log")"
-              tail="$(grep -vE '^(\[|Reading|Downloading|warning:)' "$BUILD_ROOT/diag/gdb.log" \
-                | tr '\n' '~' | head -c 900)"
-              printf '::notice title=backtrace::bytes=%s %s\n' "$bytes" "${tail:-<empty>}"
-              cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
-            else
-              printf '::notice title=backtrace::build failed: %s\n' \
-                "$(head -c 200 "$BUILD_ROOT/diag/trace.err" | tr '\n' ' ')"
-            fi
-            {
-              echo '### Probe binary'
-              echo '```text'
-              readelf -lW "$BUILD_ROOT/toolchain-verify/hello" | grep -i interpreter || echo 'no interpreter'
-              readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|SONAME|FLAGS' || true
-              readelf -xW .init_array "$BUILD_ROOT/diag/plain" 2>/dev/null | head -3 || true
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            ci_error "probe" "kodra-probe faulted: $out"
+            ci_error "probe" "kodra-probe exited $rc: $out"
             exit 1
           fi
           case "$out" in
-            *"kodra-probe ok"*) ci_notice "probe" "bionic execution verified: $out" ;;
-            *)
-              ci_error "probe" "unexpected probe output: $out"
-              exit 1
-              ;;
+          *"kodra-probe ok"*) ci_notice "probe" "bionic execution verified: $out" ;;
+          *)
+            ci_error "probe" "unexpected probe output: $out"
+            exit 1
+            ;;
           esac
           printf '```text\n%s\n```\n' "$out" >> "$GITHUB_STEP_SUMMARY"
+
+      # Separate step so diagnostics can never mask the assertion above: this only
+      # runs when the probe failed, and its own failures are reported, not fatal.
+      - name: Diagnose a failing probe
+        if: failure()
+        run: |
+          set -uo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          cd "$GITHUB_WORKSPACE"
+
+          # 1. Does code without libc run? Yes means the toolchain and the Android
+          #    loader work, leaving libc startup as the suspect.
+          printf '%s\n' \
+            'void _start(void) {' \
+            '  register long x0 __asm__("x0") = 1;' \
+            '  register const char *x1 __asm__("x1") = "BARE";' \
+            '  register long x2 __asm__("x2") = 4;' \
+            '  register long x8 __asm__("x8") = 64;' \
+            '  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x1), "r"(x2), "r"(x8) : "memory");' \
+            '  x0 = 0; x8 = 93;' \
+            '  __asm__ volatile("svc #0" :: "r"(x0), "r"(x8));' \
+            '  __builtin_unreachable();' \
+            '}' > "$BUILD_ROOT/diag-bare.c"
+          printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag-ret.c"
+          mkdir -p "$BUILD_ROOT/diag" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin"
+
+          if "$CC" -nostdlib -static -Wl,-e,_start "$BUILD_ROOT/diag-bare.c" \
+               -o "$BUILD_ROOT/diag/bare" 2>"$BUILD_ROOT/diag/bare.err"; then
+            cp "$BUILD_ROOT/diag/bare" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-bare"
+            r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-bare" 2>&1)" && rc2=0 || rc2=$?
+            printf '::notice title=diag::freestanding rc=%s out=%s\n' "$rc2" "$(printf '%s' "$r" | cut -c1-100)"
+          else
+            printf '::notice title=diag::freestanding build failed: %s\n' \
+              "$(head -c 200 "$BUILD_ROOT/diag/bare.err" | tr '\n' ' ')"
+          fi
+
+          # 2. Backtrace. gdb runs natively here (runner and target are both aarch64)
+          #    and is told the chroot is its sysroot, so bionic's libraries resolve.
+          if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag-ret.c" -o "$BUILD_ROOT/diag/trace" \
+               $ANDROID_LDFLAGS 2>"$BUILD_ROOT/diag/trace.err"; then
+            cp "$BUILD_ROOT/diag/trace" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-trace"
+            sudo gdb -q -batch \
+              -ex "set sysroot $ROOT" \
+              -ex "set solib-absolute-prefix $ROOT" \
+              -ex "set solib-search-path $ROOT/system/lib64" \
+              -ex 'set pagination off' \
+              -ex 'set confirm off' \
+              -ex 'catch exec' \
+              -ex 'run' \
+              -ex 'continue' \
+              -ex 'bt 12' \
+              -ex 'x/i $pc' \
+              -ex 'info symbol $pc' \
+              --args "$(command -v chroot)" "$ROOT" "$KODRA_PREFIX/bin/diag-trace" \
+              >"$BUILD_ROOT/diag/gdb.log" 2>&1 || true
+            cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
+            printf '::notice title=backtrace::%s\n' \
+              "$(grep -vE '^(\[|Reading|Downloading|warning:)' "$BUILD_ROOT/diag/gdb.log" \
+                 | tr '\n' '~' | cut -c1-900)"
+          else
+            printf '::notice title=backtrace::build failed: %s\n' \
+              "$(head -c 200 "$BUILD_ROOT/diag/trace.err" | tr '\n' ' ')"
+          fi
+
+          # 3. What the binary asks the loader for, next to what the image provides.
+          {
+            echo '### Probe binary'
+            echo '```text'
+            readelf -lW "$BUILD_ROOT/toolchain-verify/hello" | grep -i interpreter || echo 'no interpreter'
+            readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|FLAGS' || true
+            echo '### Image libraries'
+            ls "$ROOT/system/lib64" | head -30 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report Android runtime contents
         if: always()

@@ -8,6 +8,12 @@
 # through here.
 set -uo pipefail
 
+# All three writers print to stderr on purpose. A recipe legitimately runs
+# `archive="$(pkg_fetch ...)"`, and a diagnostic on stdout would be captured by that
+# substitution and lost: the build would fail with an empty log and no annotation.
+# stderr keeps the message inside whatever redirection is active, and GitHub reads
+# annotations from either stream.
+
 # ci_error <title> <message...> — single-line annotation, escaped per GitHub's rules.
 ci_error() {
 	local title="$1"
@@ -16,7 +22,7 @@ ci_error() {
 	message="${message//'%'/'%25'}"
 	message="${message//$'\r'/'%0D'}"
 	message="${message//$'\n'/'%0A'}"
-	printf '::error title=%s::%s\n' "$title" "$message"
+	printf '::error title=%s::%s\n' "$title" "$message" >&2
 }
 
 # ci_trap <title> — report the exact failing command of an unguarded step.
@@ -32,7 +38,7 @@ ci_notice() {
 	message="${message//'%'/'%25'}"
 	message="${message//$'\r'/'%0D'}"
 	message="${message//$'\n'/'%0A'}"
-	printf '::notice title=%s::%s\n' "$title" "$message"
+	printf '::notice title=%s::%s\n' "$title" "$message" >&2
 }
 
 # ci_annotate_tail <title> <file> [lines] — the last lines of a log as annotations.
@@ -46,7 +52,13 @@ ci_annotate_tail() {
 	local lines="${3:-8}"
 	[ -s "$file" ] || return 0
 	while IFS= read -r line; do
-		[ -n "$line" ] && ci_error "$title" "$line"
+		[ -n "$line" ] || continue
+		# A log line that is already an annotation command is re-emited verbatim:
+		# wrapping it would nest the escapes and GitHub would show the raw command.
+		case "$line" in
+		::*) printf '%s\n' "$line" >&2 ;;
+		*) ci_error "$title" "$line" ;;
+		esac
 	done < <(tail -n "$lines" "$file")
 	return 0
 }
@@ -61,7 +73,10 @@ ci_annotate_log() {
 	local n=0
 	while IFS= read -r line; do
 		[ -n "$line" ] || continue
-		ci_error "$title" "$line"
+		case "$line" in
+		::*) printf '%s\n' "$line" >&2 ;;
+		*) ci_error "$title" "$line" ;;
+		esac
 		n=$((n + 1))
 		[ "$n" -ge "$max" ] && break
 	done < <(grep -E "$pattern" "$file" | head -n "$max")

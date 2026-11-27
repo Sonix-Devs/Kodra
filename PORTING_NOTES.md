@@ -18,7 +18,7 @@ no Android build had ever succeeded; that was wrong and is corrected below.
 | --- | --- | --- |
 | 0 — audit and plan | Done (evidence: this document) | Source map, architecture decisions and owner choices recorded below; Stage 1 was approved. |
 | 1 — rebrand and CI | Done (evidence: run `45707121359` on `a5831013`, `unalivin/vscode`) | That run built, asserted and uploaded both Linux ARM64 packages and ran each packaged server on a native ARM64 runner to check its loopback bind, port-0 handoff, token enforcement, served workbench content and product-level service gating. It is historical evidence from the fork; re-verification in this repository is tracked in the 2026-11-27 section below. |
-| 2 — bootstrap | Scaffolded, unverified | `kodra/README.md`, `kodra/BOOTSTRAP.md`, `kodra/TOOLCHAIN.md`, `kodra/prefix-layout.json` and `kodra/deps/INVENTORY.md` (51 deps, 0 unknown: rebuild=5 / replace=2 / omit=2 / binary=42) define the Termux-style `$PREFIX` toolchain for NDK r26+ `aarch64-linux-android28` Node 24.22.1, and CI keeps the inventory in sync. No NDK build has executed and no prefix has been installed on a device. |
+| 2 — bootstrap | Partial evidence: the toolchain and execution path are proven, the packages are not | CI builds Android binaries and executes them on the real `linker64`/bionic from an official arm64 system image (see 2026-11-27 above). `kodra/bootstrap/build.sh` compiles zlib, bash, git, Node 24.22.1 and `node-pty` from upstream source into the staged prefix; whether those five build and pass their smoke tests is tracked by the bootstrap workflow, and nothing has been installed on a device. `kodra/README.md`, `BOOTSTRAP.md`, `TOOLCHAIN.md`, `prefix-layout.json` and `deps/INVENTORY.md` (51 deps, 0 unknown: rebuild=5 / replace=2 / omit=2 / binary=42) remain the specification. |
 | 3 — Android shell | Scaffolded, unverified | `kodra/android/` (single-Activity WebView + foreground service + bridges) now compiles to a debug APK in this repository (see 2026-11-27 below). Nothing has been installed or launched on a device, and the shell has no bootstrap or REH package to start yet. |
 | 4 — terminal, Git, GitHub login | Scaffolded, unverified | `GitBridge` (safe.directory for the shared folder), `GithubAuth` + `DeviceAuthFlow` (Device Flow, AndroidKeyStore AES-GCM, no plaintext token on disk). The terminal is REH's own xterm.js + `node-pty` and has no Kotlin counterpart; it needs the bionic `node-pty` build, which does not exist. The workbench-side `github` authentication provider and the git credential helper are not written yet. |
 | 5 — bundled extensions | Scaffolded, unverified | `docs/EXTENSIONS.md` is the source of truth: only the three MIT js-debug/profile extensions are pinned in `product.json`; Prettier, Material Icon Theme, Live Server, Python, PR/Discord are reviewed but not bundled. `ms-vscode.cpptools` stays excluded in favour of bootstrap clangd/LLDB. |
@@ -101,6 +101,46 @@ REH package, so on a device it would show the "server failed to start" notificat
 - The APK cannot start a server: there is no bionic Node and no REH package inside it.
 - The bootstrap, `node-pty`, git, terminal, GitHub sign-in, extensions, touch/IME and
   background survival remain exactly as unverified as before.
+
+## 2026-11-27 — bionic execution proven in CI (bootstrap milestone 1)
+
+**Done (evidence: bootstrap run `46062427713`, job "Toolchain + Android runtime probe"):**
+an Android binary built in this repository ran on Android's own dynamic linker.
+The probe reports `kodra-probe ok uid=0 page=4096` from inside a chroot whose
+`/system` is the official `system-images;android-28;default;arm64-v8a` image
+(checksum-verified download, ext4 found behind the image's GPT) and whose
+`/data/data/dev.sonixdevs.kodra/files` is the staged prefix. The compiler is
+clang 18 on the ARM64 runner with `--target=aarch64-linux-android28` and the NDK's
+sysroot; the executed loader is the image's `/system/bin/linker64`, not a shim.
+
+What this does and does not mean:
+
+- Proven: the toolchain emits Android binaries (`linker64` interpreter, no glibc
+  symbol versions, Android ABI note, imports bionic `libc.so`); bionic's linker
+  resolves them and the process runs on a native aarch64 core.
+- **Not proven: a device.** The kernel is the runner's Linux kernel, not an OEM
+  Android one; SELinux, the Android permission model, Play services, the app
+  sandbox, the low-memory killer and 16 KB-page devices are all absent. Every
+  device-level claim in this document stays unverified until an APK runs on
+  hardware.
+
+### Defects this milestone exposed (each one stopped the build)
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Step 6 died silently | unquoted heredoc in `toolchain.sh` expanded `$PREFIX` in a comment under `set -u` | no `$name` in that heredoc; comment rewritten |
+| `Invalid format '…'` from the runner | `$GITHUB_ENV` takes KEY=VALUE only, and `toolchain.env` carries comments *and* shell quoting | filter to `export ` lines and strip the quotes |
+| `cannot find -lgcc` | host clang picks the gcc runtime for this triple; the NDK ships only compiler-rt | `--rtlib=compiler-rt` |
+| `cannot open …/llvm-18/…/libclang_rt.builtins-aarch64-android.a` | the driver resolves compiler-rt from *its own* resource directory | `-resource-dir` pointing at the NDK's clang tree |
+| no arm64 system image installed | `sdkmanager` treats the emulator package as a hard dependency | read the repository index, verify its checksum, unpack into sdkmanager's layout |
+| `bad superblock` mounting `system.img` | the image is a GPT disk image, not the system partition | locate the ext4 superblock (offset 0 / MBR / GPT) and mount there, then bind its `system/` |
+| PTY tests would have failed later | `--bind` hides `/dev/pts`, which is a separate mount | `--rbind` + `rslave` |
+| **probe segfaulted at 0x0 before `main`** | extra `-L` entries made `-lc` resolve to the NDK's `libc.a`: the binary carried a private libc that bionic's linker never initialises | drop the `-L` list; `verify` now rejects a binary that defines `getauxval`/`__libc_init` or does not import `libc.so` |
+
+The last one is the one to remember: the binary had a perfect interpreter, a
+correct ABI note and no glibc symbols, yet could never have run. Only executing
+it caught that, and only a symbol-resolved backtrace (`kodra/bootstrap/lib/where.py`)
+named it.
 
 ## Stage 1 verification (2026-11-20 → 2026-11-26 complete)
 

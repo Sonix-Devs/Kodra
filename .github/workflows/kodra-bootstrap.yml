@@ -151,25 +151,26 @@ jobs:
               printf '::notice title=variant::bare link failed: %s\n' "$(head -c 200 "$BUILD_ROOT/diag/bare.err" | tr '\n' ' ')"
             fi
 
-            # A backtrace beats another guess: bionic's libraries are stripped, but the
-            # frames still show whether main was reached and which NULL call faulted.
-            if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/plain" \
-                 $ANDROID_LDFLAGS 2>/dev/null; then
-              cp "$BUILD_ROOT/diag/plain" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-plain"
-              bt="$(sudo gdb -q -batch \
-                -ex 'set pagination off' \
-                -ex 'set follow-fork-mode child' \
-                -ex 'set follow-exec-mode new' \
-                -ex 'catch exec' \
-                -ex 'run' \
-                -ex 'continue' \
-                -ex 'bt 10' \
-                -ex 'info registers pc x0 x30' \
-                --args "$(command -v chroot)" "$ROOT" "$KODRA_PREFIX/bin/diag-plain" 2>&1 \
-                | grep -vE '^(\[|Reading|Downloading|warning: File)' | tail -22)"
-              printf '::notice title=backtrace::%s\n' "$(printf '%s' "$bt" | tr '\n' '~' | head -c 900)"
-              printf '%s\n' "$bt" >> "$GITHUB_STEP_SUMMARY"
-            fi
+            # A NULL call before main, with working bare-syscall code, is what an
+            # unapplied relocation looks like: the GOT entry stays zero and the first
+            # call through it faults at 0x0. API 28's linker predates DT_RELR, so ask
+            # for each relocation encoding and report which ones the binary carries.
+            for spec in "plain|" "dynnone|-Wl,--pack-dyn-relocs=none" "dynandroid|-Wl,--pack-dyn-relocs=android"; do
+              name="${spec%%|*}"
+              extra="${spec#*|}"
+              # Word splitting on $extra is intended: zero or more link flags.
+              if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/$name" \
+                   $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
+                cp "$BUILD_ROOT/diag/$name" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$name"
+                r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$name" 2>&1)" && rc2=0 || rc2=$?
+                tags="$(readelf -dW "$BUILD_ROOT/diag/$name" | grep -oE 'DT_(RELR|ANDROID_REL|RELRSZ|RELACOUNT)[A-Z]*' | tr '\n' ',')"
+                printf '::notice title=variant::%s rc=%s tags=[%s] out=%s\n' \
+                  "$name" "$rc2" "$tags" "$(printf '%s' "$r" | head -c 100)"
+              else
+                printf '::notice title=variant::%s link failed: %s\n' \
+                  "$name" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
+              fi
+            done
             {
               echo '### Probe binary'
               echo '```text'

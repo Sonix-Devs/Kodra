@@ -207,9 +207,10 @@ jobs:
             printf '::notice title=startup::%s\n' \
               "$(objdump -d --section=.text "$BUILD_ROOT/diag/trace" | head -14 | tr '\n' '~' | cut -c1-600)"
             cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
-            printf '::notice title=backtrace::%s\n' \
-              "$(grep -vE '^(\[|Reading|Downloading|warning:)' "$BUILD_ROOT/diag/gdb.log" \
-                 | tr '\n' '~' | cut -c1-900)"
+            printf '::notice title=where::%s\n' \
+              "$(grep -E 'diag-trace|libc\.so|linker64' "$BUILD_ROOT/diag/gdb.log" | tr '\n' '~' | cut -c1-800)"
+            printf '::notice title=regs::%s\n' \
+              "$(grep -E '^(x[0-9]|sp|pc|lr|x30) ' "$BUILD_ROOT/diag/gdb.log" | tr '\n' '~' | cut -c1-400)"
           else
             printf '::notice title=backtrace::build failed: %s\n' \
               "$(head -c 200 "$BUILD_ROOT/diag/trace.err" | tr '\n' ' ')"

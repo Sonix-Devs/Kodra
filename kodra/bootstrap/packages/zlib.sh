@@ -4,7 +4,9 @@
 # dependency for a library whose ABI nobody else in the prefix re-exports.
 PKG_VERSION=1.3.1
 PKG_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
-PKG_SHA256=PIN
+# zlib publishes no checksum file; this is the digest the first build observed over
+# TLS, recorded by `build.sh pin`, and enforced from then on.
+PKG_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 
 build() {
 	local archive

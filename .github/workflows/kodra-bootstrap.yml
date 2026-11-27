@@ -307,6 +307,22 @@ jobs:
           }
           tail -n 5 "$RUNNER_TEMP/runtime.log" >> "$GITHUB_STEP_SUMMARY"
 
+      # A recipe whose upstream publishes no checksum file ships PKG_SHA256=PIN, and
+      # the build refuses it. This step reports those digests without enforcing them,
+      # so one run pins every remaining source and the build then enforces all of them.
+      - name: Report unpinned sources
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          unpinned="$(grep -l 'PKG_SHA256=PIN' kodra/bootstrap/packages/*.sh 2>/dev/null \
+            | xargs -r -n1 basename | sed 's/\.sh$//' | tr '\n' ' ' || true)"
+          if [ -z "${unpinned// /}" ]; then
+            ci_notice "pin" "every source is pinned; builds enforce their digests"
+            exit 0
+          fi
+          ci_notice "pin" "unpinned sources: $unpinned"
+          kodra/bootstrap/build.sh pin $unpinned || true
+
       # Packages are built in dependency order, one step each, so a failure names the
       # package instead of the whole bootstrap.
       - name: Build zlib

@@ -22,6 +22,7 @@
 # Usage:
 #   build.sh build <package>...       # build into $BUILD_ROOT/rootfs
 #   build.sh verify                   # run smoke tests inside Android userland
+#   build.sh pin <package>...         # report the sha256 of sources still marked PIN
 #   build.sh list                     # known packages
 set -euo pipefail
 
@@ -106,6 +107,22 @@ pkg_fetch_sha512() {
 	fi
 	ci_error "fetch" "sha512 mismatch for $(basename "$url"): expected $expected, got $actual"
 	return 1
+}
+
+# pkg_digest <url> — download and print the sha256 without enforcing anything.
+# Used by `pin` to obtain the digest a recipe still marks as PIN; the digest is then
+# committed and enforced by every later build.
+pkg_digest() {
+	local url="$1"
+	local archive="$CACHE/$(basename "$url")"
+	if [ ! -f "$archive" ]; then
+		curl -fsSL --retry 3 --retry-delay 2 -o "$archive.part" "$url" || {
+			ci_error "pin" "download failed: $url"
+			return 1
+		}
+		mv "$archive.part" "$archive"
+	fi
+	sha256sum "$archive" | cut -d' ' -f1
 }
 
 # pkg_extract <archive> <dir> — extracts and prints the single top-level dir.
@@ -312,11 +329,29 @@ build)
 	done
 	;;
 verify) verify ;;
+pin)
+	shift
+	[ "$#" -gt 0 ] || {
+		echo "usage: $0 pin <package>..." >&2
+		exit 2
+	}
+	for name in "$@"; do
+		# shellcheck disable=SC1090
+		. "$here/packages/$name.sh"
+		if [ "$PKG_SHA256" != "PIN" ]; then
+			log "$name already pinned: $PKG_SHA256"
+			continue
+		fi
+		digest="$(pkg_digest "$PKG_URL")" || exit 1
+		log "$name $PKG_URL sha256=$digest"
+		ci_notice "pin:$name" "PKG_SHA256=$digest"
+	done
+	;;
 list)
 	for f in "$here"/packages/*.sh; do basename "$f" .sh; done
 	;;
 *)
-	echo "usage: $0 {build <package>...|verify|list}" >&2
+	echo "usage: $0 {build <package>...|pin <package>...|verify|list}" >&2
 	exit 2
 	;;
 esac

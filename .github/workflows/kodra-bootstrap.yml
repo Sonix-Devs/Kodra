@@ -146,7 +146,8 @@ jobs:
               "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/$probe.c" -o "$BUILD_ROOT/diag/$probe" $ANDROID_LDFLAGS 2>&1 | sed "s/^/cc-$probe: /" || true
               cp "$BUILD_ROOT/diag/$probe" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$probe" 2>/dev/null || true
               r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$probe" 2>&1)" && rc2=0 || rc2=$?
-              echo "diag-$probe rc=$rc2 out=$r" | tee -a "$GITHUB_STEP_SUMMARY"
+              printf '::notice title=diag::%s rc=%s out=%s\n' "$probe" "$rc2" "$r"
+              echo "diag-$probe rc=$rc2 out=$r" >> "$GITHUB_STEP_SUMMARY"
             done
           fi
           printf '%s\n' "$out"

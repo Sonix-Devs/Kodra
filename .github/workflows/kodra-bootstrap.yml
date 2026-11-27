@@ -134,3 +134,133 @@ jobs:
             ls "$root/system/lib64" 2>/dev/null | head -20 || echo "no lib64"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  bootstrap:
+    name: Build bootstrap + smoke tests
+    needs: probe
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: kodra/bootstrap
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Install host build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm binutils e2fsprogs unzip xz-utils openssl zip
+
+      - name: Install NDK
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "ndk"
+          for ndk in "ndk;27.2.12479018" "ndk;26.3.11579264"; do
+            if sdkmanager --install "$ndk" >"$RUNNER_TEMP/ndk.log" 2>&1; then
+              echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${ndk#ndk;}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          ci_annotate_log "ndk" "$RUNNER_TEMP/ndk.log" '.'
+          exit 1
+
+      - name: Set up toolchain and Android userland
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "setup"
+          kodra/bootstrap/toolchain.sh env > "$RUNNER_TEMP/toolchain.log" 2>&1 || {
+            ci_annotate_log "toolchain-env" "$RUNNER_TEMP/toolchain.log" '.'
+            exit 1
+          }
+          sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/build-out/toolchain/bin" >> "$GITHUB_PATH"
+          kodra/bootstrap/android-runtime.sh install > "$RUNNER_TEMP/runtime.log" 2>&1 || {
+            ci_annotate_log "android-runtime" "$RUNNER_TEMP/runtime.log" '.'
+            exit 1
+          }
+          tail -n 5 "$RUNNER_TEMP/runtime.log" >> "$GITHUB_STEP_SUMMARY"
+
+      # Packages are built in dependency order, one commit-sized step each, so a
+      # failure names the package instead of the whole bootstrap.
+      - name: Build zlib
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "zlib"
+          kodra/bootstrap/build.sh build zlib
+
+      - name: Build bash
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "bash"
+          kodra/bootstrap/build.sh build bash
+
+      - name: Build git
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "git"
+          kodra/bootstrap/build.sh build git
+
+      - name: Build node
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "node"
+          kodra/bootstrap/build.sh build node
+
+      - name: Build node-pty
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "node-pty"
+          kodra/bootstrap/build.sh build node-pty
+
+      - name: Smoke tests inside the Android userland
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_trap "verify"
+          kodra/bootstrap/build.sh verify
+
+      - name: Pack bootstrap
+        if: always()
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          prefix="build-out/rootfs/data/data/dev.sonixdevs.kodra/files/usr"
+          if [ -d "$prefix" ]; then
+            ( cd "$prefix" && zip -qry "$GITHUB_WORKSPACE/kodra-bootstrap-aarch64.zip" . )
+            sha256sum kodra-bootstrap-aarch64.zip | tee -a "$GITHUB_STEP_SUMMARY"
+            ls -la "$prefix/bin" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            ci_notice "pack" "no prefix produced; nothing to pack"
+          fi
+
+      - name: Upload bootstrap
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: kodra-bootstrap-aarch64
+          path: kodra-bootstrap-aarch64.zip
+          if-no-files-found: warn
+          retention-days: 14

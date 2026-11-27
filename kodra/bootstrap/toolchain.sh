@@ -142,8 +142,8 @@ export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -I$KODRA_P
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'
 export PKG_CONFIG_LIBDIR='$KODRA_PREFIX/lib/pkgconfig'
-# Staging tree: mirrors the device filesystem, so a recipe installing with
-# --prefix=$KODRA_PREFIX and DESTDIR=$KODRA_ROOTFS lands at its real device path.
+# Staging tree mirrors the device filesystem; a recipe that installs into the
+# device prefix with this as DESTDIR therefore lands at its real on-device path.
 export KODRA_ROOTFS='$BUILD_ROOT/rootfs'
 EOF
 	mkdir -p "$TOOLCHAIN_DIR/libdir"

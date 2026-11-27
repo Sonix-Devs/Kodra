@@ -42,6 +42,12 @@ KODRA_PREFIX="${KODRA_PREFIX:-/data/data/dev.sonixdevs.kodra/files/usr}"
 PREFIX_DIR="$ROOTFS$KODRA_PREFIX"
 : "${CC:?run toolchain.sh env first (CC is unset)}"
 
+# The Node version is defined once, in packages/node.sh; node-pty builds its addon
+# against that same tree, so the two can never drift apart.
+NODE_VERSION="$(. "$here/packages/node.sh" >/dev/null 2>&1; printf '%s' "$PKG_VERSION")"
+export NODE_VERSION
+log "node target: $NODE_VERSION"
+
 # Source, install and keep-out directories.
 mkdir -p "$CACHE" "$PREFIX_DIR"/{bin,etc/kodra/packages,include,lib,libexec,share,tmp,var/log}
 
@@ -51,6 +57,11 @@ log() { printf '[kodra-bootstrap] %s\n' "$*"; }
 
 pkg_fetch() {
 	local url="$1" sha="$2"
+	# A recipe may ship PKG_SHA256=PIN for a source whose upstream publishes no
+	# checksum file. The first build then reports the digest it actually saw, over
+	# TLS, and that value is committed; every later build enforces it. Guessing a
+	# digest would defeat the check, and skipping it entirely would mean shipping
+	# whatever the network handed us.
 	local archive="$CACHE/$(basename "$url")"
 	if [ ! -f "$archive" ]; then
 		log "fetch $url"
@@ -62,11 +73,38 @@ pkg_fetch() {
 	fi
 	local actual
 	actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+	if [ "$sha" = "PIN" ]; then
+		ci_error "pin-required" "PKG_SHA256 for $(basename "$url") is PIN; commit this observed digest: $actual"
+		return 1
+	fi
 	if [ "$actual" != "$sha" ]; then
 		ci_error "fetch" "sha256 mismatch for $(basename "$url"): expected $sha, got $actual"
 		return 1
 	fi
 	printf '%s' "$archive"
+}
+
+# pkg_fetch_sha512 <url> <base64 sha512> — for npm registry tarballs, whose signed
+# `dist.integrity` is a sha512 rather than a sha256.
+pkg_fetch_sha512() {
+	local url="$1" expected="$2"
+	local archive="$CACHE/$(basename "$url")"
+	if [ ! -f "$archive" ]; then
+		log "fetch $url"
+		curl -fsSL --retry 3 --retry-delay 2 -o "$archive.part" "$url" || {
+			ci_error "fetch" "download failed: $url"
+			return 1
+		}
+		mv "$archive.part" "$archive"
+	fi
+	local actual
+	actual="$(openssl dgst -sha512 -binary "$archive" | openssl base64 -A)"
+	if [ "${actual#=}" = "${expected#=}" ] || [ "$actual" = "$expected" ]; then
+		printf '%s' "$archive"
+		return 0
+	fi
+	ci_error "fetch" "sha512 mismatch for $(basename "$url"): expected $expected, got $actual"
+	return 1
 }
 
 # pkg_extract <archive> <dir> — extracts and prints the single top-level dir.

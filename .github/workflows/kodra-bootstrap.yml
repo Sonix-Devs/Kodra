@@ -38,6 +38,11 @@ jobs:
           persist-credentials: false
           sparse-checkout: kodra/bootstrap
 
+      - name: Lint the bootstrap scripts and this workflow
+        run: |
+          set -euo pipefail
+          python3 kodra/bootstrap/lib/lint.py
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4
 
@@ -259,6 +264,11 @@ jobs:
           persist-credentials: false
           sparse-checkout: kodra/bootstrap
           sparse-checkout-cone-mode: false
+
+      - name: Lint the bootstrap scripts and this workflow
+        run: |
+          set -euo pipefail
+          python3 kodra/bootstrap/lib/lint.py
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4

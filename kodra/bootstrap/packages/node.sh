@@ -43,7 +43,6 @@ build() {
 		--cross-compiling \
 		--with-intl=none \
 		--openssl-no-asm \
-		--shared-openssl=no \
 		CC="$CC" CXX="$CXX" CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" \
 		CFLAGS="$ANDROID_CFLAGS -O2" \
 		CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
@@ -58,7 +57,6 @@ build() {
 			--cross-compiling \
 			--with-intl=none \
 			--openssl-no-asm \
-			--shared-openssl=no \
 			CC="$CC" CXX="$CXX" CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" \
 			CFLAGS="$ANDROID_CFLAGS -O2 -D__ANDROID__" \
 			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti -D__ANDROID__" \

@@ -29,7 +29,12 @@ build() {
 		return 1
 	}
 
-	# git's Makefile runs $(SHELL_PATH) -c while parsing and refuses to continue unless a
+	# NO_PTHREADS: bionic has no POSIX thread cancellation — pthread.h declares neither
+	# PTHREAD_CANCEL_DISABLE nor pthread_setcancelstate, and git uses both around fork.
+	# That makes git single-threaded on Android, which is a real difference and is
+	# recorded as such rather than papered over.
+	#
+	# SHELL_PATH: git's Makefile runs $(SHELL_PATH) -c while parsing and refuses to continue unless a
 	# modern shell answers. SHELL_PATH cannot point at the prefix during the build: the
 	# staged bash is an Android binary whose interpreter is /system/bin/linker64, so the
 	# build host cannot execute it at all. The build therefore uses the host shell and
@@ -51,6 +56,7 @@ build() {
 		NO_OPENSSL=1 \
 		NO_CURL=1 \
 		NO_LIBPCRE=1 \
+		NO_PTHREADS=1 \
 		NO_INSTALL_HARDLINKS=1 \
 		SHELL_PATH="$GIT_BUILD_SHELL" \
 		INSTALL_SYMLINKS=1 \

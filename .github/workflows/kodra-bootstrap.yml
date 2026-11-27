@@ -1,0 +1,122 @@
+name: Kodra Bootstrap (bionic aarch64)
+
+# Builds the Termux-style runtime that Kodra ships in the APK, for Kodra's own
+# prefix (/data/data/dev.sonixdevs.kodra/files/usr) rather than com.termux, and
+# executes the result against a real Android/bionic userland.
+#
+# Log access note: Actions job logs are served from Azure blob storage, which the
+# development sandbox cannot reach. Every step below therefore routes failures
+# through kodra/bootstrap/lib/ci.sh, which emits annotations instead.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "kodra/bootstrap/**"
+      - ".github/workflows/kodra-bootstrap.yml"
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_API: "28"
+  KODRA_PREFIX: /data/data/dev.sonixdevs.kodra/files/usr
+  BUILD_ROOT: ${{ github.workspace }}/build-out
+
+jobs:
+  probe:
+    name: Toolchain + Android runtime probe
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: kodra/bootstrap
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Install host build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm binutils e2fsprogs unzip xz-utils
+
+      - name: Install NDK
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          for ndk in "ndk;27.2.12479018" "ndk;26.3.11579264"; do
+            if sdkmanager --install "$ndk" >"$RUNNER_TEMP/ndk.log" 2>&1; then
+              version="${ndk#ndk;}"
+              echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$version" >> "$GITHUB_ENV"
+              ci_notice "ndk" "installed $ndk"
+              exit 0
+            fi
+          done
+          ci_annotate_log "ndk" "$RUNNER_TEMP/ndk.log" 'Warning|Error|error'
+          exit 1
+
+      - name: Write toolchain environment
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_run "toolchain" "$RUNNER_TEMP/toolchain.log" -- kodra/bootstrap/toolchain.sh env
+          # Export CC/CXX/LDFLAGS/... to later steps through GITHUB_ENV.
+          sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"
+          cat build-out/toolchain/toolchain.env >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the compiler emits Android binaries
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_run "toolchain-verify" "$RUNNER_TEMP/verify.log" -- kodra/bootstrap/toolchain.sh verify
+          file build-out/toolchain-verify/hello | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install the Android userland
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          ci_run "android-runtime" "$RUNNER_TEMP/runtime.log" -- kodra/bootstrap/android-runtime.sh install
+          tail -n 20 "$RUNNER_TEMP/runtime.log" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Execute the probe inside the Android userland
+        run: |
+          set -euo pipefail
+          . kodra/bootstrap/lib/ci.sh
+          set -e
+          mkdir -p "$BUILD_ROOT/prefix/bin"
+          install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" "$BUILD_ROOT/prefix/bin/kodra-probe"
+          out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe")"
+          printf '%s\n' "$out"
+          case "$out" in
+            *"kodra-probe ok"*) ci_notice "probe" "bionic execution verified: $out" ;;
+            *)
+              ci_error "probe" "unexpected probe output: $out"
+              exit 1
+              ;;
+          esac
+          printf '```text\n%s\n```\n' "$out" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report Android runtime contents
+        if: always()
+        run: |
+          set -euo pipefail
+          root="${ANDROID_ROOT:-$BUILD_ROOT/android-root}"
+          {
+            echo '### Android userland'
+            echo '```text'
+            ls -l "$root/system/bin/linker64" 2>/dev/null || echo "no linker64"
+            ls "$root/system/lib64" 2>/dev/null | head -20 || echo "no lib64"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -33,8 +33,9 @@ build() {
 	# PTHREAD_CANCEL_DISABLE nor pthread_setcancelstate, and git uses both around fork.
 	# That makes git single-threaded on Android, which is a real difference and is
 	# recorded as such rather than papered over.
-	# PTHREAD_LIBS: empty because bionic keeps the pthread entry points in libc and ships
-	# no libpthread, so git's default -lpthread fails at link time.
+	# PTHREAD_LIBS and NEEDS_LIBRT: empty because bionic keeps the pthread entry points
+	# and clock_gettime in libc and ships neither libpthread nor librt, so git's Linux
+	# defaults (-lpthread, -lrt) fail at link time.
 	#
 	# SHELL_PATH: git's Makefile runs $(SHELL_PATH) -c while parsing and refuses to continue unless a
 	# modern shell answers. SHELL_PATH cannot point at the prefix during the build: the
@@ -60,6 +61,7 @@ build() {
 		NO_LIBPCRE=1 \
 		NO_PTHREADS=1 \
 		PTHREAD_LIBS= \
+		NEEDS_LIBRT= \
 		NO_INSTALL_HARDLINKS=1 \
 		SHELL_PATH="$GIT_BUILD_SHELL" \
 		INSTALL_SYMLINKS=1 \

@@ -119,7 +119,23 @@ jobs:
           mkdir -p "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin"
           install -m 0755 "$BUILD_ROOT/toolchain-verify/hello" \
             "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/kodra-probe"
-          out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe")"
+          # Triage before the assertion: a segfault from bionic's own sh means the
+          # chroot is wrong; a segfault only from our binary means the link is wrong.
+          out="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe" 2>&1)" && rc=0 || rc=$?
+          printf 'probe rc=%s out=%s\n' "$rc" "$out"
+          if [ "$rc" != "0" ]; then
+            kodra/bootstrap/android-runtime.sh run /system/bin/sh -c 'echo shell-ok; uname -m' 2>&1 \
+              | sed 's/^/shell: /' | tee -a "$GITHUB_STEP_SUMMARY" || true
+            kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/kodra-probe" 2>&1 \
+              | sed 's/^/probe2: /' | tee -a "$GITHUB_STEP_SUMMARY" || true
+            {
+              echo '### Probe binary'
+              echo '```text'
+              readelf -lW "$BUILD_ROOT/toolchain-verify/hello" | grep -i interpreter || echo 'no interpreter'
+              readelf -dW "$BUILD_ROOT/toolchain-verify/hello" | grep -E 'NEEDED|RPATH|RUNPATH' || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
           printf '%s\n' "$out"
           case "$out" in
             *"kodra-probe ok"*) ci_notice "probe" "bionic execution verified: $out" ;;

@@ -272,8 +272,11 @@ install() {
 	# Report the exact bionic build in use, so the evidence names a real linker rather
 	# than an assumption.
 	local linker_version
-	linker_version="$(sudo chroot "$ROOT" /system/bin/linker64 --version 2>&1 | head -2 || true)"
-	ci_notice "android-runtime" "linker: ${linker_version//$'\n'/ }"
+	# Report what the chroot can actually execute, not what it contains: this is the
+	# difference between "the files are there" and "bionic runs".
+	local shell_out
+	shell_out="$(sudo chroot "$ROOT" /system/bin/sh -c 'echo ok; uname -m' 2>&1 | tr '\n' ' ' || true)"
+	ci_notice "android-runtime" "$found: /system/bin/sh -> ${shell_out:-<no output>}"
 }
 
 run() {

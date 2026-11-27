@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   lint-and-build:
@@ -58,19 +59,7 @@ jobs:
 
       - name: Assemble debug APK
         working-directory: kodra/android
-        run: |
-          set -o pipefail
-          ./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | tee /tmp/assemble.log
-          ec=${PIPESTATUS[0]}
-          if [ $ec -ne 0 ]; then
-            echo "### assembleDebug failed" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 80 /tmp/assemble.log >> $GITHUB_STEP_SUMMARY 2>&1 || true
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "--- assemble tail ---"
-            tail -n 60 /tmp/assemble.log 2>&1 || true
-            exit $ec
-          fi
+        run: ./gradlew :app:assembleDebug --stacktrace --warning-mode all
 
       - name: Android Lint
         working-directory: kodra/android
@@ -92,3 +81,16 @@ jobs:
           path: kodra/android/app/build/reports/lint-results-debug.html
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Post failure to PR
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          err=$(./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | grep -E "e: |error:" | head -20 || true)
+          body="**Kodra Android assembleDebug failed** on $GITHUB_SHA
+          \`\`\`
+          $err
+          \`\`\`
+          [Run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          gh pr comment ${{ github.event.pull_request.number }} --body "$body" 2>&1 || true
+        env:
+          GH_TOKEN: ${{ github.token }}

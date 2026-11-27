@@ -25,7 +25,7 @@ class WorkbenchBridge(
     private val filePicker: FilePickerBridge
 ) {
     fun listener(): WebViewCompat.WebMessageListener =
-        WebViewCompat.WebMessageListener { _, message: WebMessageCompat, _: Uri?, reply: JavaScriptReplyProxy, _: Boolean ->
+        WebViewCompat.WebMessageListener { _, message: WebMessageCompat, _: Uri?, _: Boolean, reply: JavaScriptReplyProxy ->
             handle(message.data ?: "", reply)
         }
 

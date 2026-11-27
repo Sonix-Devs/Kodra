@@ -26,7 +26,7 @@ object GitBridge {
 
     fun configure(context: Context, layout: BootstrapInstaller.Layout) {
         val git = File(layout.prefix, "bin/git")
-        if (!git.isExecutable()) return
+        if (!git.canExecute()) return
 
         // Shared storage is owned by the media provider identity, not by the app UID, so
         // git refuses to operate on it without an explicit safe.directory entry.
@@ -51,5 +51,5 @@ object GitBridge {
     }
 
     fun isAvailable(layout: BootstrapInstaller.Layout): Boolean =
-        File(layout.prefix, "bin/git").isExecutable()
+        File(layout.prefix, "bin/git").canExecute()
 }

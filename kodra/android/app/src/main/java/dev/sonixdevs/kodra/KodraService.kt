@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.io.File
 
 /**
  * Foreground service that owns the local Node server and PTY tree.
@@ -29,15 +28,12 @@ class KodraService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var server: ServerProcess? = null
     private var bound: ServerProcess.Bound? = null
-    private var tokenFile: File? = null
 
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
-        fun service(): KodraService = this@KodraService
-        fun bound(): ServerProcess.Bound? = bound
-        fun tokenFile(): File? = tokenFile
-        fun isReady(): Boolean = bound != null && server?.isAlive() == true
+        /** Host/port once the server has bound; null while it is still starting. */
+        fun bound(): ServerProcess.Bound? = bound.takeIf { server?.isAlive() == true }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -55,7 +51,6 @@ class KodraService : Service() {
                 val layout = BootstrapInstaller.installIfNeeded(this@KodraService)
                 val token = TokenManager.generate()
                 val tf = TokenManager.writeToken(this@KodraService, token)
-                tokenFile = tf
                 val srv = ServerProcess(this@KodraService)
                 server = srv
                 val b = srv.start(tf, layout)

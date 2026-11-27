@@ -34,7 +34,7 @@ import androidx.webkit.WebViewFeature
  */
 class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
-    private var service: KodraService? = null
+    private var localBinder: KodraService.LocalBinder? = null
     private var pendingLoad = false
 
     private lateinit var filePicker: FilePickerBridge
@@ -46,12 +46,12 @@ class MainActivity : AppCompatActivity() {
 
     private val serviceConn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            service = (binder as? KodraService.LocalBinder)?.service()
+            localBinder = binder as? KodraService.LocalBinder
             maybeLoad()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            service = null
+            localBinder = null
         }
     }
 
@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeLoad() {
         val view = webView ?: return
-        val bound = service?.bound() ?: return
+        val bound = localBinder?.bound() ?: return
         if (loadAttempted) return
         val token = TokenManager.readToken(this) ?: return
         loadAttempted = true

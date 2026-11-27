@@ -5,8 +5,8 @@ Stage 1 shipped **Linux/glibc** `linux-arm64` Node 24.22.1 + REH JS. That closur
 prefix that lives under Kodra's private app storage:
 
 ```
-$PREFIX = /data/data/dev.unalivin.kodra/files/usr
-$HOME   = /data/data/dev.unalivin.kodra/files/home
+$PREFIX = /data/data/dev.sonixdevs.kodra/files/usr
+$HOME   = /data/data/dev.sonixdevs.kodra/files/home
 ```
 
 Both paths are app-private (no `WRITE_EXTERNAL_STORAGE` needed) and survive

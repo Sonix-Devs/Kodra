@@ -21,7 +21,7 @@
   "prettier.requireConfig": false,
   "material-icon-theme.hidesExplorerArrows": false,
   "liveServer.settings.donotShowInfoMsg": true,
-  "python.defaultInterpreterPath": "/data/data/dev.unalivin.kodra/files/usr/bin/python3",
+  "python.defaultInterpreterPath": "/data/data/dev.sonixdevs.kodra/files/usr/bin/python3",
   // Discord (Stage 5 separate gate) — keep keys even if extension not bundled
   "discord.enabled": true,
   "discord.detailsEditing": "In Kodra",

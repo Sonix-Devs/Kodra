@@ -11,8 +11,8 @@ FilePickerBridge — SAF → POSIX — /storage/emulated/0/Kodra
 GithubAuth + DeviceAuthFlow — Keystore AES/GCM — git credential helper
 ```
 
-All Android code in `kodra/android/app/src/main/java/dev/unalivin/kodra/`.
-Product identity `dev.unalivin.kodra` (product.json), URL protocol `kodra://`.
+All Android code in `kodra/android/app/src/main/java/dev/sonixdevs/kodra/`.
+Product identity `dev.sonixdevs.kodra` (product.json), URL protocol `kodra://`.
 No Microsoft gallery/telemetry/tunnel — verified by `kodra-reh.yml` origin checks.
 
 See PORTING_NOTES.md Architecture decisions 1-9 for rationale.

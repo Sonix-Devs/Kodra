@@ -7,7 +7,7 @@ Stage 1 delivered a branded Linux/glibc REH/REH-web and a host-inventory CI gate
 
 Stage 2 must produce a Termux-style prefix under Kodra's private app storage:
 
-  /data/data/dev.unalivin.kodra/files/usr
+  /data/data/dev.sonixdevs.kodra/files/usr
 
 and prove we can `pkg`/apt-install the bootstrap closure against bionic:
 

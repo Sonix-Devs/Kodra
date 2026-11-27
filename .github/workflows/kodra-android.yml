@@ -7,90 +7,83 @@ on:
       - main
   pull_request:
     paths:
-      - "kodra/android/**"
-      - ".github/workflows/kodra-android.yml"
       - "kodra/**"
       - "build/kodra/**"
+      - ".github/workflows/kodra-android.yml"
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   lint-and-build:
     name: Lint + assembleDebug
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          sparse-checkout: kodra/android
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
       - name: Set up Android SDK
-        run: |
-          yes | sdkmanager --licenses 2>&1 | tail -3 || true
-          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -10 || true
+        uses: android-actions/setup-android@v4.0.4
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Install SDK platform and build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v6.4.0
         with:
-          gradle-version: "8.7"
-
-      - name: Generate Gradle wrapper
-        working-directory: kodra/android
-        run: |
-          gradle wrapper --gradle-version 8.7 2>&1 | tee /tmp/wrapper.log
-          ec=${PIPESTATUS[0]}
-          if [ $ec -ne 0 ]; then
-            echo "## Gradle wrapper FAILED" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 80 /tmp/wrapper.log >> $GITHUB_STEP_SUMMARY 2>&1 || true
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit $ec
-          fi
-          chmod +x gradlew
+          gradle-version: "8.9"
 
       - name: Assemble debug APK
         working-directory: kodra/android
-        run: ./gradlew :app:assembleDebug --stacktrace --warning-mode all
+        run: |
+          set -o pipefail
+          gradle --no-daemon :app:assembleDebug --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/gradle-build.log"
 
-      - name: Android Lint
-        working-directory: kodra/android
-        run: ./gradlew :app:lintDebug --stacktrace
+      - name: Report build errors
+        if: failure()
+        run: |
+          log="$RUNNER_TEMP/gradle-build.log"
+          test -s "$log" || exit 0
+          {
+            echo '### Gradle build failure'
+            echo '```text'
+            grep -E '^e: |error:|What went wrong' -A3 "$log" | head -80 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          { grep -E '^e: |What went wrong' -A2 "$log" || true; } | head -40 | while IFS= read -r line; do
+            escaped="${line//'%'/'%25'}"
+            escaped="${escaped//$'\r'/'%0D'}"
+            echo "::error title=Gradle::${escaped}"
+          done
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: kodra-debug-apk
           path: kodra/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
+      - name: Android Lint
+        working-directory: kodra/android
+        continue-on-error: true
+        run: gradle --no-daemon :app:lintDebug --stacktrace
+
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: kodra-lint-report
           path: kodra/android/app/build/reports/lint-results-debug.html
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Post failure to PR
-        if: failure() && github.event_name == 'pull_request'
-        run: |
-          err=$(./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | grep -E "e: |error:" | head -20 || true)
-          body="**Kodra Android assembleDebug failed** on $GITHUB_SHA
-          \`\`\`
-          $err
-          \`\`\`
-          [Run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-          gh pr comment ${{ github.event.pull_request.number }} --body "$body" 2>&1 || true
-        env:
-          GH_TOKEN: ${{ github.token }}

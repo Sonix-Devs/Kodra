@@ -208,7 +208,13 @@ install_one() {
 		# One annotation, not twenty: the runner stops publishing annotations after ten
 		# per step, so a chatty failure hides its own cause. The last lines are the
 		# cause, and the full log goes to the summary.
-		ci_error "build:$name" "failed: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-800)"
+		# One annotation has room for thirty lines and GitHub keeps only the first ten
+		# annotations, so both views go into this single message: what the build called an
+		# error, and where it stopped.
+		local errors
+		errors="$(grep -aE '(error:|Error [0-9]|fatal error|undefined reference|cannot find|No such file)' "$log_file" \
+			| tail -n 3 | tr '\n' '~' | cut -c1-400)"
+		ci_error "build:$name" "failed. errors: ${errors:-none matched} | tail: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-400)"
 		ci_summary "build:$name" "$log_file" 120
 		return 1
 	}

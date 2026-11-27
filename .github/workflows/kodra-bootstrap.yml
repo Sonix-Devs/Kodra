@@ -163,7 +163,10 @@ jobs:
                    $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
                 cp "$BUILD_ROOT/diag/$name" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$name"
                 r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$name" 2>&1)" && rc2=0 || rc2=$?
-                tags="$(readelf -dW "$BUILD_ROOT/diag/$name" | grep -oE 'DT_(RELR|ANDROID_REL|RELRSZ|RELACOUNT)[A-Z]*' | tr '\n' ',')"
+                # grep exits 1 when a binary carries no packed relocations at all,
+                # which is itself a result; set -e must not treat it as a failure.
+                tags="$(readelf -dW "$BUILD_ROOT/diag/$name" \
+                  | grep -oE 'DT_(RELR|ANDROID_REL|RELRSZ|RELACOUNT)[A-Z]*' | tr '\n' ',' || true)"
                 printf '::notice title=variant::%s rc=%s tags=[%s] out=%s\n' \
                   "$name" "$rc2" "$tags" "$(printf '%s' "$r" | head -c 100)"
               else

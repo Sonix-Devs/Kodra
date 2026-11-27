@@ -127,8 +127,12 @@ jobs:
             # and let the one that runs name the cause.
             mkdir -p "$BUILD_ROOT/diag"
             printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
-            while IFS='|' read -r name extra; do
-              [ -n "$name" ] || continue
+            for spec in "plain" "base4k|-Wl,-z,max-page-size=4096" "nobti|-mbranch-protection=none" "static|-static"; do
+              name="${spec%%|*}"
+              extra=""
+              case "$spec" in
+                *\|*) extra="${spec#*|}" ;;
+              esac
               # Word splitting on $extra is intended: it carries zero or more flags.
               if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/$name" \
                    $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
@@ -140,12 +144,7 @@ jobs:
                 printf '::notice title=variant::%s [%s] link failed: %s\n' \
                   "$name" "$extra" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
               fi
-            done <<'VARIANTS'
-plain|
-base4k|-Wl,-z,max-page-size=4096
-nobti|-mbranch-protection=none
-static|-static
-VARIANTS
+            done
             {
               echo '### Probe binary'
               echo '```text'

@@ -142,6 +142,9 @@ jobs:
           set -uo pipefail
           . kodra/bootstrap/lib/ci.sh
           cd "$GITHUB_WORKSPACE"
+          # ROOT is computed inside android-runtime.sh and is not exported; a bare $ROOT
+          # under set -u ends this step with status 1 and no message at all.
+          ROOT="${ANDROID_ROOT:-$BUILD_ROOT/android-root}"
 
           # 1. Does code without libc run? Yes means the toolchain and the Android
           #    loader work, leaving libc startup as the suspect.

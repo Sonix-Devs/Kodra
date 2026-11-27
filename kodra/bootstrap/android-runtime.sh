@@ -31,8 +31,12 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_API="${ANDROID_API:-28}"
 BUILD_ROOT="${BUILD_ROOT:-$PWD/build-out}"
 ROOT="${ANDROID_ROOT:-$BUILD_ROOT/android-root}"
-STAGE="${KODRA_STAGE:-$BUILD_ROOT/prefix}"
+ROOTFS="${KODRA_ROOTFS:-$BUILD_ROOT/rootfs}"
 KODRA_PREFIX="${KODRA_PREFIX:-/data/data/dev.sonixdevs.kodra/files/usr}"
+# The whole app-private files/ tree is mounted (not just usr/), because $HOME lives
+# beside the prefix and git, npm and ssh all write into it.
+FILES_DIR="$(dirname "$KODRA_PREFIX")"
+KODRA_HOME="$FILES_DIR/home"
 # Candidates are tried in order; arm64 images are not published for every API/flavour
 # combination, and the first one that installs is the one used.
 IMAGE_CANDIDATES="${IMAGE_CANDIDATES:-system-images;android-${ANDROID_API};default;arm64-v8a system-images;android-${ANDROID_API};google_apis;arm64-v8a system-images;android-30;google_apis;arm64-v8a system-images;android-31;google_apis;arm64-v8a}"
@@ -96,11 +100,11 @@ install() {
 		return 1
 	}
 
-	# Device paths inside the chroot: the prefix keeps its real path so rpath and
+	# Device paths inside the chroot: files/ keeps its real path so rpath and
 	# baked-in configuration resolve without wrappers.
-	sudo mkdir -p "$ROOT$(dirname "$KODRA_PREFIX")"
-	mkdir -p "$STAGE"
-	sudo mount --bind "$STAGE" "$ROOT$KODRA_PREFIX"
+	mkdir -p "$ROOTFS$KODRA_PREFIX" "$ROOTFS$KODRA_HOME" "$ROOTFS$KODRA_PREFIX/tmp"
+	sudo mkdir -p "$ROOT$FILES_DIR"
+	sudo mount --bind "$ROOTFS$FILES_DIR" "$ROOT$FILES_DIR"
 	sudo mount --bind /proc "$ROOT/proc"
 	sudo mount --bind /dev "$ROOT/dev" || ci_notice "android-runtime" "/dev bind failed; PTY tests will need devpts only"
 	sudo mount -t devpts -o newinstance,mode=620 devpts "$ROOT/dev/pts" || ci_notice "android-runtime" "devpts unavailable; node-pty test will be skipped"
@@ -113,16 +117,17 @@ install() {
 }
 
 run() {
-	mkdir -p "$STAGE"
+	mkdir -p "$ROOTFS$KODRA_PREFIX" "$ROOTFS$KODRA_HOME" "$ROOTFS$KODRA_PREFIX/tmp"
 	# Environment mirrors the app: the service sets HOME/PREFIX/TMPDIR/LD_LIBRARY_PATH
 	# before spawning the server (see ServerProcess.kt).
 	sudo env -i \
-		HOME="$KODRA_PREFIX" \
+		HOME="$KODRA_HOME" \
 		PREFIX="$KODRA_PREFIX" \
 		TMPDIR="$KODRA_PREFIX/tmp" \
 		TERM="${TERM:-xterm-256color}" \
 		PATH="$KODRA_PREFIX/bin:/system/bin" \
 		LD_LIBRARY_PATH="$KODRA_PREFIX/lib" \
+		NODE_PATH="$KODRA_PREFIX/lib/node_modules" \
 		"$(command -v chroot)" "$ROOT" "$@"
 }
 

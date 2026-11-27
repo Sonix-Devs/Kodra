@@ -71,10 +71,13 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "toolchain-env"
-          kodra/bootstrap/toolchain.sh env > "$RUNNER_TEMP/toolchain.log" 2>&1 || {
-            ci_run "toolchain" "$RUNNER_TEMP/toolchain.log" -- true
+          # Not '|| {...}': a failure there suppresses the ERR trap, and ci_run on a
+          # trivially successful command would annotate nothing. Pattern '.' makes
+          # every line of the log an annotation, so the cause is never invisible.
+          if ! kodra/bootstrap/toolchain.sh env > "$RUNNER_TEMP/toolchain.log" 2>&1; then
+            ci_annotate_log "toolchain-env" "$RUNNER_TEMP/toolchain.log" '.'
             exit 1
-          }
+          fi
           # Export CC/CXX/LDFLAGS/... to later steps through $GITHUB_ENV. Values are
           # single-quoted paths and flags only; nothing that needs shell evaluation.
           sed -e 's/^export //' build-out/toolchain/toolchain.env >> "$GITHUB_ENV"

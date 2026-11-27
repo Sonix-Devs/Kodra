@@ -185,10 +185,11 @@ raise SystemExit(1)
 PY
 }
 
-install_on() {
-	local img="$1" offset="$2" opts="loop,ro"
+# mount_image <image> <offset> <target>
+mount_image() {
+	local img="$1" offset="$2" target="$3" opts="loop,ro"
 	[ "$offset" != "0" ] && opts="$opts,offset=$offset"
-	sudo mount -o "$opts" "$img" "$ROOT/system"
+	sudo mount -o "$opts" "$img" "$target"
 }
 
 install() {
@@ -214,12 +215,39 @@ install() {
 		ci_error "android-runtime" "no ext4 superblock found in $img (first bytes: $(od -An -tx1 -N16 "$img"))"
 		return 1
 	}
-	if ! install_on "$img" "$offset"; then
+	# The image is a disk, not necessarily the system partition itself. Mount it aside
+	# and then bind the directory that actually holds /bin/linker64 into place, so the
+	# chroot sees the device's real /system layout either way.
+	sudo mkdir -p "$ROOT/disk"
+	if ! mount_image "$img" "$offset" "$ROOT/disk"; then
 		ci_error "android-runtime" "could not loop-mount $img at offset $offset ($(file -b "$img"))"
 		return 1
 	fi
+
+	local system_src=""
+	if [ -x "$ROOT/disk/system/bin/linker64" ]; then
+		system_src="$ROOT/disk/system"
+	elif [ -x "$ROOT/disk/bin/linker64" ]; then
+		system_src="$ROOT/disk"
+	fi
+	[ -n "$system_src" ] || {
+		ci_error "android-runtime" "$found: no bin/linker64 in the image; top level is: $(ls -A "$ROOT/disk" | tr '\n' ' ')"
+		return 1
+	}
+	sudo mount --bind "$system_src" "$ROOT/system"
+	sudo mount --make-rslave "$ROOT/system" || true
+
+	# vendor/ and product/ ship beside system/ on some images; mount them when present
+	# instead of leaving dangling paths inside the chroot.
+	local part
+	for part in vendor product; do
+		if [ -d "$ROOT/disk/$part" ]; then
+			sudo mkdir -p "$ROOT/$part"
+			sudo mount --bind "$ROOT/disk/$part" "$ROOT/$part" || true
+		fi
+	done
 	[ -x "$ROOT/system/bin/linker64" ] || {
-		ci_error "android-runtime" "$found has no /system/bin/linker64; wrong image architecture"
+		ci_error "android-runtime" "$found has no /system/bin/linker64 after mounting; wrong image architecture"
 		return 1
 	}
 

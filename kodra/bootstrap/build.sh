@@ -46,7 +46,9 @@ PREFIX_DIR="$ROOTFS$KODRA_PREFIX"
 # Source, install and keep-out directories.
 mkdir -p "$CACHE" "$PREFIX_DIR"/{bin,etc/kodra/packages,include,lib,libexec,share,tmp,var/log}
 
-log() { printf '[kodra-bootstrap] %s\n' "$*"; }
+# log goes to stderr: recipes do `archive="$(pkg_fetch ...)"`, and anything printed on
+# stdout would be captured into the variable instead of shown to the maintainer.
+log() { printf '[kodra-bootstrap] %s\n' "$*" >&2; }
 
 # The Node version is defined once, in packages/node.sh; node-pty builds its addon
 # against that same tree, so the two can never drift apart. Read after log() exists:

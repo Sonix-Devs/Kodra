@@ -6,7 +6,8 @@
 # local and file:// repositories and reports the gap explicitly instead of
 # pretending https works.
 PKG_VERSION=2.47.1
-PKG_URL="https://mirror.rackspace.com/git/git-$PKG_VERSION.tar.gz"
+# kernel.org is the canonical source and publishes sha256sums.txt alongside it.
+PKG_URL="https://www.kernel.org/pub/software/scm/git/git-$PKG_VERSION.tar.gz"
 PKG_SHA256=PIN
 
 build() {

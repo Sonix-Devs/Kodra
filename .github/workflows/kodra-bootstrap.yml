@@ -127,22 +127,29 @@ jobs:
             # and let the one that runs name the cause.
             mkdir -p "$BUILD_ROOT/diag"
             printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
-            for spec in "plain" "base4k|-Wl,-z,max-page-size=4096" "nobti|-mbranch-protection=none" "static|-static"; do
-              name="${spec%%|*}"
-              extra=""
-              case "$spec" in
-                *\|*) extra="${spec#*|}" ;;
+            printf '#include <unistd.h>\nvoid _start(void){write(1,"BARE",4);_exit(0);}\n' \
+              > "$BUILD_ROOT/diag/bare.c"
+            ld_nores="$(printf '%s' "$ANDROID_LDFLAGS" | sed -E 's/--rtlib=compiler-rt //; s/-resource-dir=[^ ]+ //')"
+            ld_norp="$(printf '%s' "$ANDROID_LDFLAGS" | sed -E 's#-Wl,-rpath,[^ ]+ ##')"
+            for name in minimal nores norp bare; do
+              case "$name" in
+                # What a plain clang invocation with the Android triple produces, with
+                # nothing of ours added but the interpreter path.
+                minimal) set -- "$CC" -Wl,--dynamic-linker=/system/bin/linker64 "$BUILD_ROOT/diag/ret.c" ;;
+                nores) set -- "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" $ld_nores ;;
+                norp) set -- "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" $ld_norp ;;
+                # No libc at all: proves the link and the loader run code, leaving libc
+                # startup as the only remaining suspect.
+                bare) set -- "$CC" -nostdlib -static -Wl,-e,_start "$BUILD_ROOT/diag/bare.c" ;;
               esac
-              # Word splitting on $extra is intended: it carries zero or more flags.
-              if "$CC" $ANDROID_CFLAGS "$BUILD_ROOT/diag/ret.c" -o "$BUILD_ROOT/diag/$name" \
-                   $ANDROID_LDFLAGS $extra 2>"$BUILD_ROOT/diag/$name.err"; then
+              if "$@" -o "$BUILD_ROOT/diag/$name" 2>"$BUILD_ROOT/diag/$name.err"; then
                 cp "$BUILD_ROOT/diag/$name" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-$name"
                 r="$(kodra/bootstrap/android-runtime.sh run "$KODRA_PREFIX/bin/diag-$name" 2>&1)" && rc2=0 || rc2=$?
-                printf '::notice title=variant::%s [%s] rc=%s out=%s\n' \
-                  "$name" "$extra" "$rc2" "$(printf '%s' "$r" | head -c 120)"
+                printf '::notice title=variant::%s rc=%s out=%s\n' \
+                  "$name" "$rc2" "$(printf '%s' "$r" | head -c 120)"
               else
-                printf '::notice title=variant::%s [%s] link failed: %s\n' \
-                  "$name" "$extra" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
+                printf '::notice title=variant::%s link failed: %s\n' \
+                  "$name" "$(head -c 160 "$BUILD_ROOT/diag/$name.err" | tr '\n' ' ')"
               fi
             done
             {

@@ -45,31 +45,25 @@ jobs:
       - name: Generate Gradle wrapper
         working-directory: kodra/android
         run: |
-          gradle wrapper --gradle-version 8.7
+          gradle wrapper --gradle-version 8.7 2>&1 | tee /tmp/wrapper.log
+          ec=${PIPESTATUS[0]}
+          if [ $ec -ne 0 ]; then
+            echo "## Gradle wrapper FAILED" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 80 /tmp/wrapper.log >> $GITHUB_STEP_SUMMARY 2>&1 || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit $ec
+          fi
           chmod +x gradlew
 
       - name: Assemble debug APK
         working-directory: kodra/android
         run: |
-          ./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | tee /tmp/assemble.log
-          ec=\${PIPESTATUS[0]}
-          # Always export log for artifact
-          cp /tmp/assemble.log /tmp/gradle-assemble.log 2>&1 || true
-          exit \$ec
+          ./gradlew :app:assembleDebug --stacktrace --warning-mode all
 
       - name: Android Lint
-        if: always()
         working-directory: kodra/android
-        run: ./gradlew :app:lintDebug --stacktrace || true
-
-      - name: Upload assemble log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kodra-assemble-log
-          path: /tmp/gradle-assemble.log
-          if-no-files-found: warn
-          retention-days: 7
+        run: ./gradlew :app:lintDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

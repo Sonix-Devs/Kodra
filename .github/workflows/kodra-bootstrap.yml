@@ -307,15 +307,21 @@ jobs:
           }
           tail -n 5 "$RUNNER_TEMP/runtime.log" >> "$GITHUB_STEP_SUMMARY"
 
-      # Packages are built in dependency order, one commit-sized step each, so a
-      # failure names the package instead of the whole bootstrap.
+      # Packages are built in dependency order, one step each, so a failure names the
+      # package instead of the whole bootstrap.
       - name: Build zlib
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "zlib"
-          kodra/bootstrap/build.sh build zlib
+          # ci_run annotates the failing output, because job logs are unreadable from
+          # the development sandbox; 'if !' keeps the ERR trap quiet about a failure
+          # that has already been reported with its cause.
+          if ! ci_run "zlib" "$RUNNER_TEMP/zlib.log" -- kodra/bootstrap/build.sh build zlib; then
+            exit 1
+          fi
+          tail -n 5 "$RUNNER_TEMP/zlib.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build bash
         run: |
@@ -323,7 +329,13 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "bash"
-          kodra/bootstrap/build.sh build bash
+          # ci_run annotates the failing output, because job logs are unreadable from
+          # the development sandbox; 'if !' keeps the ERR trap quiet about a failure
+          # that has already been reported with its cause.
+          if ! ci_run "bash" "$RUNNER_TEMP/bash.log" -- kodra/bootstrap/build.sh build bash; then
+            exit 1
+          fi
+          tail -n 5 "$RUNNER_TEMP/bash.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build git
         run: |
@@ -331,7 +343,13 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "git"
-          kodra/bootstrap/build.sh build git
+          # ci_run annotates the failing output, because job logs are unreadable from
+          # the development sandbox; 'if !' keeps the ERR trap quiet about a failure
+          # that has already been reported with its cause.
+          if ! ci_run "git" "$RUNNER_TEMP/git.log" -- kodra/bootstrap/build.sh build git; then
+            exit 1
+          fi
+          tail -n 5 "$RUNNER_TEMP/git.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build node
         run: |
@@ -339,7 +357,13 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "node"
-          kodra/bootstrap/build.sh build node
+          # ci_run annotates the failing output, because job logs are unreadable from
+          # the development sandbox; 'if !' keeps the ERR trap quiet about a failure
+          # that has already been reported with its cause.
+          if ! ci_run "node" "$RUNNER_TEMP/node.log" -- kodra/bootstrap/build.sh build node; then
+            exit 1
+          fi
+          tail -n 5 "$RUNNER_TEMP/node.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build node-pty
         run: |
@@ -347,7 +371,13 @@ jobs:
           . kodra/bootstrap/lib/ci.sh
           set -e
           ci_trap "node-pty"
-          kodra/bootstrap/build.sh build node-pty
+          # ci_run annotates the failing output, because job logs are unreadable from
+          # the development sandbox; 'if !' keeps the ERR trap quiet about a failure
+          # that has already been reported with its cause.
+          if ! ci_run "node-pty" "$RUNNER_TEMP/node-pty.log" -- kodra/bootstrap/build.sh build node-pty; then
+            exit 1
+          fi
+          tail -n 5 "$RUNNER_TEMP/node-pty.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke tests inside the Android userland
         run: |
@@ -365,9 +395,12 @@ jobs:
           set -e
           prefix="build-out/rootfs/data/data/dev.sonixdevs.kodra/files/usr"
           if [ -d "$prefix" ] && [ -n "$(ls -A "$prefix" 2>/dev/null)" ]; then
-            ( cd "$prefix" && zip -qry "$GITHUB_WORKSPACE/kodra-bootstrap-aarch64.zip" . )
-            sha256sum kodra-bootstrap-aarch64.zip | tee -a "$GITHUB_STEP_SUMMARY"
-            ls -la "$prefix/bin" | tee -a "$GITHUB_STEP_SUMMARY"
+            if ( cd "$prefix" && zip -qry "$GITHUB_WORKSPACE/kodra-bootstrap-aarch64.zip" . ); then
+              sha256sum kodra-bootstrap-aarch64.zip | tee -a "$GITHUB_STEP_SUMMARY"
+              ls -la "$prefix/bin" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              ci_error "pack" "zip failed for $prefix"
+            fi
           else
             ci_notice "pack" "no prefix produced; nothing to pack"
           fi

@@ -45,6 +45,7 @@ PREFIX_DIR="$ROOTFS$KODRA_PREFIX"
 
 # Source, install and keep-out directories.
 mkdir -p "$CACHE" "$PREFIX_DIR"/{bin,etc/kodra/packages,include,lib,libexec,share,tmp,var/log}
+prepare_device_paths
 
 # log goes to stderr: recipes do `archive="$(pkg_fetch ...)"`, and anything printed on
 # stdout would be captured into the variable instead of shown to the maintainer.
@@ -58,6 +59,24 @@ export NODE_VERSION
 log "node target: $NODE_VERSION"
 
 # --- helpers available to recipes -------------------------------------------
+
+# A few upstream builds execute paths they are about to bake in. git, for one, runs
+# $(SHELL_PATH) -c to decide whether the shell is modern enough and gives up with
+# 'please_set_SHELL_PATH_to_a_more_modern_shell' when the device path does not exist
+# on the build host. Pointing the real device path at the staged prefix keeps the
+# correct path in the installed scripts and lets those checks pass.
+prepare_device_paths() {
+	local parent
+	parent="$(dirname "$(dirname "$KODRA_PREFIX")")"
+	[ -e "$parent/files/usr" ] && return 0
+	if ! sudo -n true 2>/dev/null; then
+		ci_notice "device-path" "no passwordless sudo: $KODRA_PREFIX stays unreachable on this host"
+		return 0
+	fi
+	sudo mkdir -p "$parent/files"
+	sudo ln -sfn "$PREFIX_DIR" "$parent/files/usr"
+	ci_notice "device-path" "$KODRA_PREFIX resolves on this host to $PREFIX_DIR"
+}
 
 pkg_fetch() {
 	local url="$1" sha="$2"

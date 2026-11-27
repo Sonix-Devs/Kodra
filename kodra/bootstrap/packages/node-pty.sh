@@ -12,6 +12,10 @@ PKG_URL="https://registry.npmjs.org/node-pty/-/node-pty-$PKG_VERSION.tgz"
 # dist.integrity from the npm registry packument for this exact version.
 PKG_SHA512="3Rej3788OnasAwoSmTZhlCeUraJ9CQldtL5b571b9+3Nv47+PaxA5VPIGOOs+16OYQePTrC1Lrs8a9/df5WPRg=="
 
+# What this package must leave in the prefix; build.sh fails the build if any of it
+# is missing, so a wrong DESTDIR cannot pass as success.
+PKG_ARTIFACTS="lib/node_modules/node-pty/build/Release/pty.node"
+
 build() {
 	local archive src nodedir shim dest
 	archive="$(pkg_fetch_sha512 "$PKG_URL" "$PKG_SHA512")" || return 1

@@ -11,6 +11,10 @@ PKG_URL="https://ftp.gnu.org/gnu/bash/bash-5.2.37.tar.gz"
 # build observed over TLS (`build.sh pin`) and is enforced from then on.
 PKG_SHA256=9599b22ecd1d5787ad7d3b7bf0c59f312b3396d1e281175dd1f8a4014da621ff
 
+# What this package must leave in the prefix; build.sh fails the build if any of it
+# is missing, so a wrong DESTDIR cannot pass as success.
+PKG_ARTIFACTS="bin/bash share/man/man1/bash.1"
+
 build() {
 	local archive
 	archive="$(pkg_fetch "$PKG_URL" "$PKG_SHA256")" || return 1

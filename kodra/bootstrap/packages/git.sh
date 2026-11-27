@@ -13,6 +13,10 @@ PKG_URL="https://www.kernel.org/pub/software/scm/git/git-$PKG_VERSION.tar.gz"
 # (`build.sh pin`) and is enforced from then on.
 PKG_SHA256=f4c4e98667800585d218dfdf415eb72f73baa7abcac4569e2ce497970f8d6665
 
+# What this package must leave in the prefix; build.sh fails the build if any of it
+# is missing, so a wrong DESTDIR cannot pass as success.
+PKG_ARTIFACTS="bin/git libexec/git-core/git-commit"
+
 build() {
 	local archive
 	archive="$(pkg_fetch "$PKG_URL" "$PKG_SHA256")" || return 1

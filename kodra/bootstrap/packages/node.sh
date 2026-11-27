@@ -13,6 +13,10 @@ PKG_URL="https://nodejs.org/dist/v24.22.1/node-v24.22.1.tar.xz"
 # From https://nodejs.org/dist/v24.22.1/SHASUMS256.txt (published checksum list).
 PKG_SHA256=4f5379796280cdaeb0c2f358fd04b6a16cc4fb7dfa83b5a8c91a9d963b435231
 
+# What this package must leave in the prefix; build.sh fails the build if any of it
+# is missing, so a wrong DESTDIR cannot pass as success.
+PKG_ARTIFACTS="bin/node bin/npm"
+
 build() {
 	local archive src
 	archive="$(pkg_fetch "$PKG_URL" "$PKG_SHA256")" || return 1

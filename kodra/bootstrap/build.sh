@@ -72,9 +72,15 @@ prepare_device_paths() {
 		ci_notice "device-path" "no passwordless sudo: $KODRA_PREFIX stays unreachable on this host"
 		return 0
 	fi
-	sudo mkdir -p "$parent/files"
-	sudo ln -sfn "$PREFIX_DIR" "$parent/files/usr"
-	ci_notice "device-path" "$KODRA_PREFIX resolves on this host to $PREFIX_DIR"
+	sudo mkdir -p "$parent/files/usr"
+	if ! sudo mount --bind "$PREFIX_DIR" "$parent/files/usr" 2>/dev/null; then
+		sudo ln -sfn "$PREFIX_DIR" "$parent/files/usr"
+	fi
+	if [ -e "$KODRA_PREFIX/etc/kodra/packages" ] || [ -x "$KODRA_PREFIX/bin/bash" ]; then
+		ci_notice "device-path" "$KODRA_PREFIX resolves to $PREFIX_DIR"
+	else
+		ci_error "device-path" "$KODRA_PREFIX exists but does not resolve to $PREFIX_DIR"
+	fi
 }
 
 pkg_fetch() {
@@ -255,6 +261,18 @@ install_one() {
 $new_files
 EOF
 	[ "$bad" -eq 0 ] || return 1
+
+	# Declared artifacts must exist in the staged prefix. Without this a package can
+	# "build" successfully and land nowhere — a DESTDIR or prefix mistake then shows up
+	# much later as an unexplainable missing file in the next package's build.
+	local artifact missing=""
+	for artifact in ${PKG_ARTIFACTS:-}; do
+		[ -e "$PREFIX_DIR/$artifact" ] || missing="$missing $artifact"
+	done
+	if [ -n "$missing" ]; then
+		ci_error "build:$name" "installed nothing at:$missing (prefix bin: $(ls "$PREFIX_DIR/bin" 2>/dev/null | tr '\n' ' '))"
+		return 1
+	fi
 
 	local json="$PREFIX_DIR/etc/kodra/packages/$name.json"
 	{

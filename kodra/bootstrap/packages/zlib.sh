@@ -8,6 +8,10 @@ PKG_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.
 # TLS, recorded by `build.sh pin`, and enforced from then on.
 PKG_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 
+# What this package must leave in the prefix; build.sh fails the build if any of it
+# is missing, so a wrong DESTDIR cannot pass as success.
+PKG_ARTIFACTS="lib/libz.a include/zlib.h"
+
 build() {
 	local archive
 	archive="$(pkg_fetch "$PKG_URL" "$PKG_SHA256")" || return 1

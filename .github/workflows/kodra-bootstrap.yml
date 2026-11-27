@@ -207,10 +207,15 @@ jobs:
             printf '::notice title=startup::%s\n' \
               "$(objdump -d --section=.text "$BUILD_ROOT/diag/trace" | head -14 | tr '\n' '~' | cut -c1-600)"
             cat "$BUILD_ROOT/diag/gdb.log" >> "$GITHUB_STEP_SUMMARY"
-            printf '::notice title=where::%s\n' \
-              "$(grep -E 'diag-trace|libc\.so|linker64' "$BUILD_ROOT/diag/gdb.log" | tr '\n' '~' | cut -c1-800)"
-            printf '::notice title=regs::%s\n' \
-              "$(grep -E '^(x[0-9]|sp|pc|lr|x30) ' "$BUILD_ROOT/diag/gdb.log" | tr '\n' '~' | cut -c1-400)"
+            # A program counter is not an answer; resolve it to a symbol and the
+            # instructions around it, and report what the link actually pulled in.
+            where="$(python3 kodra/bootstrap/lib/where.py \
+              "$BUILD_ROOT/diag/gdb.log" "$BUILD_ROOT/diag/trace" 2>&1 || true)"
+            printf '%s\n' "$where" >> "$GITHUB_STEP_SUMMARY"
+            printf '::notice title=fault::%s\n' \
+              "$(printf '%s' "$where" | head -3 | tr '\n' '~' | cut -c1-400)"
+            printf '::notice title=pulled-in::%s\n' \
+              "$(printf '%s' "$where" | sed -n '/dynamic section/,$p' | tr '\n' '~' | cut -c1-600)"
           else
             printf '::notice title=backtrace::build failed: %s\n' \
               "$(head -c 200 "$BUILD_ROOT/diag/trace.err" | tr '\n' ' ')"

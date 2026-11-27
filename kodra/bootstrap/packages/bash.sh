@@ -20,6 +20,10 @@ build() {
 	# --without-bash-malloc: bionic's allocator is the only one that cooperates with
 	# the Android low-memory killer and with mspace used by the workbench.
 	# --disable-nls: no message catalogues in the bootstrap.
+	# HAVE_UNISTD_H: bash's bundled termcap compiles with its own include list, and
+	# without it its tparam.c calls write() with no prototype — an error since C99.
+	# Nothing may be commented *inside* this command: a comment ends a backslash
+	# continuation, which silently drops every argument after it.
 	./configure \
 		--host="$TARGET_TRIPLE" \
 		--build="$(uname -m)-linux-gnu" \
@@ -27,9 +31,6 @@ build() {
 		--without-bash-malloc \
 		--disable-nls \
 		CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-		# HAVE_UNISTD_H: bash's bundled termcap compiles with its own include list, and
-		# without this its tparam.c calls write() with no prototype — an error in C99 and
-		# later, not a warning. Android does have unistd.h.
 		CFLAGS="$ANDROID_CFLAGS -O2 -DHAVE_UNISTD_H=1" \
 		LDFLAGS="$ANDROID_LDFLAGS" \
 		bash_cv_getcwd_malloc=yes \

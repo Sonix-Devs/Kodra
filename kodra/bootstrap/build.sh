@@ -42,16 +42,17 @@ KODRA_PREFIX="${KODRA_PREFIX:-/data/data/dev.sonixdevs.kodra/files/usr}"
 PREFIX_DIR="$ROOTFS$KODRA_PREFIX"
 : "${CC:?run toolchain.sh env first (CC is unset)}"
 
-# The Node version is defined once, in packages/node.sh; node-pty builds its addon
-# against that same tree, so the two can never drift apart.
-NODE_VERSION="$(. "$here/packages/node.sh" >/dev/null 2>&1; printf '%s' "$PKG_VERSION")"
-export NODE_VERSION
-log "node target: $NODE_VERSION"
-
 # Source, install and keep-out directories.
 mkdir -p "$CACHE" "$PREFIX_DIR"/{bin,etc/kodra/packages,include,lib,libexec,share,tmp,var/log}
 
 log() { printf '[kodra-bootstrap] %s\n' "$*"; }
+
+# The Node version is defined once, in packages/node.sh; node-pty builds its addon
+# against that same tree, so the two can never drift apart. Read after log() exists:
+# this runs at file scope, before any function that could define it has been called.
+NODE_VERSION="$(. "$here/packages/node.sh" >/dev/null 2>&1; printf '%s' "$PKG_VERSION")"
+export NODE_VERSION
+log "node target: $NODE_VERSION"
 
 # --- helpers available to recipes -------------------------------------------
 

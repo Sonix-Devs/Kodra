@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            clang lld llvm binutils e2fsprogs unzip xz-utils
+            clang lld llvm binutils e2fsprogs unzip xz-utils openssl zip gdb
 
       - name: Install NDK
         run: |

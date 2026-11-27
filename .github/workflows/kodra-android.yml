@@ -50,29 +50,24 @@ jobs:
 
       - name: Assemble debug APK
         working-directory: kodra/android
-        run: ./gradlew :app:assembleDebug --stacktrace --warning-mode all
+        run: |
+          ./gradlew :app:assembleDebug --stacktrace --warning-mode all 2>&1 | tee /tmp/assemble.log
+          ec=\${PIPESTATUS[0]}
+          # Always export log for artifact
+          cp /tmp/assemble.log /tmp/gradle-assemble.log 2>&1 || true
+          exit \$ec
 
       - name: Android Lint
         if: always()
         working-directory: kodra/android
         run: ./gradlew :app:lintDebug --stacktrace || true
 
-      - name: Capture assemble failure log
-        if: failure()
-        working-directory: kodra/android
-        run: |
-          mkdir -p /tmp/kodra-logs
-          find app/build -name "*.log" -exec cp {} /tmp/kodra-logs/ \; 2>&1 | head
-          cp -r app/build/reports /tmp/kodra-logs/reports 2>&1 | head
-          ls -la /tmp/kodra-logs/ 2>&1 | head -20
-          echo "Assemble failed - see artifact kodra-assemble-failure-logs"
-
-      - name: Upload failure logs
-        if: failure()
+      - name: Upload assemble log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kodra-assemble-failure-logs
-          path: /tmp/kodra-logs/
+          name: kodra-assemble-log
+          path: /tmp/gradle-assemble.log
           if-no-files-found: warn
           retention-days: 7
 

@@ -138,6 +138,59 @@ fetch_image() {
 	ci_notice "android-runtime" "system image: $pkg -> $image_dir"
 }
 
+# Google's images are ext4, but not always at offset 0: some are raw disk images
+# carrying an MBR or GPT first. Rather than mounting blind and reporting "bad
+# superblock", find the filesystem and mount at its offset.
+fs_offset() {
+	python3 - "$1" <<'PY'
+import struct
+import sys
+
+path = sys.argv[1]
+EXT_MAGIC = b"\x53\xef"  # 0xEF53 little-endian, at 0x438 into the filesystem
+
+
+def is_ext(f, offset):
+    f.seek(offset + 0x438)
+    return f.read(2) == EXT_MAGIC
+
+
+with open(path, "rb") as f:
+    if is_ext(f, 0):
+        print(0)
+        raise SystemExit(0)
+
+    # MBR: four 16-byte entries at 0x1BE, start LBA at +8.
+    f.seek(0x1BE)
+    entries = f.read(64)
+    for i in range(4):
+        entry = entries[i * 16 : (i + 1) * 16]
+        if len(entry) < 16:
+            break
+        lba = struct.unpack("<I", entry[8:12])[0]
+        if lba and is_ext(f, lba * 512):
+            print(lba * 512)
+            raise SystemExit(0)
+
+    # GPT: header at LBA 1, first usable partition entry at LBA 2.
+    f.seek(512)
+    if f.read(8) == b"EFI PART":
+        f.seek(2 * 512)
+        entry = f.read(128)
+        first_lba = struct.unpack("<Q", entry[32:40])[0]
+        if first_lba and is_ext(f, first_lba * 512):
+            print(first_lba * 512)
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+install_on() {
+	local img="$1" offset="$2" opts="loop,ro"
+	[ "$offset" != "0" ] && opts="$opts,offset=$offset"
+	sudo mount -o "$opts" "$img" "$ROOT/system"
+}
+
 install() {
 	local image found=""
 	for image in $IMAGE_CANDIDATES; do
@@ -151,15 +204,20 @@ install() {
 		return 1
 	}
 
-	local img="$IMAGE_DIR/system.img"
+	local img="$IMAGE_DIR/system.img" offset
 	desparse "$img"
+	ci_notice "android-runtime" "system.img: $(file -b "$img"), $(stat -c %s "$img") bytes"
 
 	# The chroot is a directory tree whose /system is the image itself.
 	sudo mkdir -p "$ROOT/system" "$ROOT/proc" "$ROOT/dev/pts" "$ROOT/tmp"
-	sudo mount -o loop,ro "$img" "$ROOT/system" || {
-		ci_error "android-runtime" "could not loop-mount $img (loop devices unavailable?)"
+	offset="$(fs_offset "$img")" || {
+		ci_error "android-runtime" "no ext4 superblock found in $img (first bytes: $(od -An -tx1 -N16 "$img"))"
 		return 1
 	}
+	if ! install_on "$img" "$offset"; then
+		ci_error "android-runtime" "could not loop-mount $img at offset $offset ($(file -b "$img"))"
+		return 1
+	fi
 	[ -x "$ROOT/system/bin/linker64" ] || {
 		ci_error "android-runtime" "$found has no /system/bin/linker64; wrong image architecture"
 		return 1

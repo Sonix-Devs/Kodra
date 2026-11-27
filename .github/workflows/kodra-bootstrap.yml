@@ -129,20 +129,19 @@ jobs:
             printf 'int main(void){return 42;}\n' > "$BUILD_ROOT/diag/ret.c"
             # Freestanding: no libc, no crt, raw syscalls. If this runs, the linker and
             # the Android loader execute our code and only libc startup can be at fault.
-            cat > "$BUILD_ROOT/diag/bare.c" <<'BAREC'
-            void _start(void) {
-              register long x0 __asm__("x0") = 1;
-              register const char *x1 __asm__("x1") = "BARE";
-              register long x2 __asm__("x2") = 4;
-              register long x8 __asm__("x8") = 64;
-              __asm__ volatile("svc #0" : "+r"(x0) : "r"(x1), "r"(x2), "r"(x8) : "memory");
-              x0 = 0;
-              x8 = 93;
-              __asm__ volatile("svc #0" :: "r"(x0), "r"(x8));
-              __builtin_unreachable();
-            }
-            BAREC
-            sed -i 's/^            //' "$BUILD_ROOT/diag/bare.c"
+            # No heredoc here on purpose: YAML strips only the block's own indentation,
+            # so a heredoc terminator would keep two spaces and never terminate.
+            printf '%s\n' \
+              'void _start(void) {' \
+              '  register long x0 __asm__("x0") = 1;' \
+              '  register const char *x1 __asm__("x1") = "BARE";' \
+              '  register long x2 __asm__("x2") = 4;' \
+              '  register long x8 __asm__("x8") = 64;' \
+              '  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x1), "r"(x2), "r"(x8) : "memory");' \
+              '  x0 = 0; x8 = 93;' \
+              '  __asm__ volatile("svc #0" :: "r"(x0), "r"(x8));' \
+              '  __builtin_unreachable();' \
+              '}' > "$BUILD_ROOT/diag/bare.c"
             if "$CC" -nostdlib -static -Wl,-e,_start "$BUILD_ROOT/diag/bare.c" \
                  -o "$BUILD_ROOT/diag/bare" 2>"$BUILD_ROOT/diag/bare.err"; then
               cp "$BUILD_ROOT/diag/bare" "$BUILD_ROOT/rootfs$KODRA_PREFIX/bin/diag-bare"

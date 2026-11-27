@@ -166,7 +166,13 @@ export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin'
 # inherit the host's ld-linux and never start on a device. rpath points at the
 # device prefix, so its lib directory resolves with no LD_LIBRARY_PATH, exactly as
 # Android app binaries do.
-export ANDROID_LDFLAGS='--rtlib=compiler-rt -resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib -L$TOOLCHAIN_DIR/libdir -L$(dirname "$libdir") -L$libdir -L$builtins'
+# No -L entries on purpose. The NDK's unversioned aarch64-linux-android directory
+# ships libc.a next to (for some releases, instead of) the shared stub, so adding it
+# to the search path makes -lc resolve to the static libc: the executable then
+# contains a private libc that bionic's linker never initialises, and the first libc
+# call faults at 0x0. clang's driver already searches the sysroot and the API
+# directory, and -resource-dir locates compiler-rt; nothing else is needed.
+export ANDROID_LDFLAGS='--rtlib=compiler-rt -resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib'
 export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -resource-dir=$resdir -I$KODRA_PREFIX/include -isystem $resdir/include'
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'
@@ -196,6 +202,21 @@ verify() {
 	fi
 	if readelf -V "$out" 2>/dev/null | grep -q 'GLIBC_'; then
 		ci_error "toolchain" "probe requires glibc symbol versions; the sysroot was not used"
+		return 1
+	fi
+	# A dynamically linked Android executable must import libc, not contain it. If the
+	# link picked up the sysroot's libc.a, the binary carries a private copy whose
+	# globals bionic's linker never initialises: it starts, then faults at 0x0 on the
+	# first libc call. Checking for the definitions is what makes that visible, because
+	# the interpreter and the ABI note look perfect either way.
+	if ! readelf -dW "$out" | grep -q 'NEEDED.*libc\.so'; then
+		ci_error "toolchain" "probe does not import libc.so; -lc resolved to the static libc"
+		return 1
+	fi
+	local static_libc
+	static_libc="$(nm --defined-only "$out" 2>/dev/null | awk '$3 == "getauxval" || $3 == "__libc_init" { print $3 }' | tr '\n' ' ')"
+	if [ -n "$static_libc" ]; then
+		ci_error "toolchain" "probe defines $static_libc itself: libc was linked statically"
 		return 1
 	fi
 	local note

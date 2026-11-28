@@ -58,20 +58,17 @@ build() {
 			--openssl-no-asm >"$log" 2>&1
 	}
 
-	# --dest-os=android states the target honestly; fall back to linux semantics (libuv
-	# and V8 treat bionic as Linux) if a future version drops it, and say which path was
-	# taken so the artifact is not ambiguous.
+	# --dest-os=android is not cosmetic: it sets gyp's OS variable to "android", which is
+	# what makes Node's own deps pick their bionic configurations — c-ares, for one, only
+	# undefines HAVE_GETSERVBYPORT_R in its config/android header, and bionic has no
+	# getservbyport_r. Falling back to --dest-os=linux compiles a libc-agnostic tree and
+	# fails there, so this build does not fall back: an android configure that fails is a
+	# failure worth reading.
 	if ! node_configure android configure-android.log; then
-		ci_error "node" "--dest-os=android configure failed"
+		ci_error "node" "configure failed for --dest-os=android"
 		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
 			|| tail -n 10 configure-android.log >&2
-		ci_notice "node" "--dest-os=android rejected, retrying with --dest-os=linux"
-		node_configure linux configure-linux.log -D__ANDROID__ || {
-			ci_error "node" "--dest-os=linux configure failed"
-			grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-linux.log | head -n 10 >&2 \
-				|| tail -n 10 configure-linux.log >&2
-			return 1
-		}
+		return 1
 	fi
 
 	grep -E '^(CC|CXX|dest_os|dest_cpu)' out/Makefile 2>/dev/null || true

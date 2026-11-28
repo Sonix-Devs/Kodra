@@ -173,7 +173,12 @@ export KODRA_TOOLCHAIN_BIN='$TOOLCHAIN_DIR/bin'
 # call faults at 0x0. clang's driver already searches the sysroot and the API
 # directory, and -resource-dir locates compiler-rt; nothing else is needed.
 export ANDROID_LDFLAGS='--rtlib=compiler-rt -resource-dir=$resdir -fuse-ld=lld -Wl,--dynamic-linker=/system/bin/linker64 -Wl,-z,max-page-size=16384 -Wl,-rpath,$KODRA_PREFIX/lib'
-export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -resource-dir=$resdir -I$KODRA_PREFIX/include -isystem $resdir/include'
+# No -isystem for clang's own include directory. -resource-dir already points clang at
+# it, and clang inserts it itself, after the C++ headers; spelling it out as -isystem
+# puts it *first*, so <cstddef>'s include of <stddef.h> finds clang's stddef.h instead
+# of libc++'s wrapper ("<cstddef> tried including <stddef.h> but didn't find libc++'s
+# <stddef.h>"). C sources never noticed; the first C++ compile did.
+export ANDROID_CFLAGS='-fPIC -D__ANDROID_API__=$ANDROID_API -DANDROID -resource-dir=$resdir -I$KODRA_PREFIX/include'
 export ANDROID_CPPFLAGS='-I$KODRA_PREFIX/include'
 export PKG_CONFIG_PATH='$KODRA_PREFIX/lib/pkgconfig'
 export PKG_CONFIG_LIBDIR='$KODRA_PREFIX/lib/pkgconfig'

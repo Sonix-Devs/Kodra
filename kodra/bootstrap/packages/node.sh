@@ -32,6 +32,9 @@ build() {
 	export CXX_host="${CXX_host:-clang++}"
 	export LINK_host="${LINK_host:-clang++}"
 	export AR_host="${AR_host:-llvm-ar}"
+	# gyp wants these spelled the way its conditions compare them.
+	NODE_HOST_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+	NODE_HOST_ARCH="$(uname -m | sed -e 's/^aarch64$/arm64/')"
 
 	# Node's configure reads CC, CXX, CFLAGS, LDFLAGS and the CC_host family from the
 	# *environment*. Passing them as `VAR=value` arguments makes gyp read them as files
@@ -45,9 +48,11 @@ build() {
 		local log="$1"
 		# Positional arguments are forwarded to gyp by configure ("pass the leftover
 		# non-whitespace positional arguments to GYP"), which is the only supported way to
-		# define a gyp variable that configure does not expose. Node's common.gypi requires
-		# android_ndk_path whenever OS=="android"; it is used for a single -I into the
-		# NDK's cpufeatures headers.
+		# define a gyp variable that configure does not expose. Three are needed:
+		#   android_ndk_path — common.gypi dereferences it whenever OS=="android"
+		#     (one -I into the NDK's cpufeatures headers);
+		#   host_os, host_arch — v8.gyp branches on them for the host toolset, and nothing
+		#     in Node or gyp defines them for this build.
 		CC="$CC" CXX="$CXX" AR="$AR" \
 			CFLAGS="$ANDROID_CFLAGS -O2" \
 			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
@@ -60,7 +65,9 @@ build() {
 			--cross-compiling \
 			--with-intl=none \
 			--openssl-no-asm \
-			"-Dandroid_ndk_path=$ANDROID_NDK_ROOT" >"$log" 2>&1
+			"-Dandroid_ndk_path=$ANDROID_NDK_ROOT" \
+			"-Dhost_os=$NODE_HOST_OS" \
+			"-Dhost_arch=$NODE_HOST_ARCH" >"$log" 2>&1
 	}
 
 	# --dest-os=android is not cosmetic: it sets gyp's OS variable to "android", which is

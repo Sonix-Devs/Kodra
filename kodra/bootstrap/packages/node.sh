@@ -197,32 +197,34 @@ node_probe() {
 # annotation, so the text says 'error:' and stays short, and it prints five lines so
 # they fill that window instead of the compiler's cascades.
 node_report_failure() {
-	local log="$1" rc="$2" target line driver obj sym n
-	# make names the rule that failed in square brackets: [<file>.mk:NN: <path>] Error N.
-	# The path is the object for a compile and the binary for a link, and either one can
-	# be looked up in the wrapper's log to recover the command that produced it.
-	target="$(grep -a -oE '\[[^]]+\] Error [0-9]+' "$log" | tail -n 1 \
-		| sed -e 's/\] Error [0-9]*$//' -e 's/^.*: //' || true)"
+	local log="$1" rc="$2" target line driver tail_of_line sym n
+	# gyp's rules name the file they were building in square brackets, and the innermost
+	# failure is the first such line: the outer ones are node's own Makefile recursing.
+	# The last match would be '[Makefile:143: node] Error 2', which says only that make
+	# gave up. That target is an object for a compile and a binary for a link, and the
+	# wrapper's log has the command that produced it.
+	target="$(grep -a -oE '\[[^]]*\.mk:[0-9]+: [^]]*\] Error [0-9]+' "$log" | head -n 1 \
+		| sed -e 's/\] Error [0-9]*$//' -e 's/^\[[^]]*: //' || true)"
 	line=""
 	if [ -n "$target" ] && [ -f "$PKG_DIR/cc.log" ]; then
 		line="$(grep -a -F -- "$target" "$PKG_DIR/cc.log" | tail -n 1 || true)"
 	fi
 	driver="$(printf '%s' "$line" | cut -d' ' -f1)"
-	case "$line" in
-	*cpu-features.o*) obj=yes ;;
-	*) obj=no ;;
-	esac
+	# The end of the command is where this recipe's own flags are: the wrapper appends
+	# the cpufeatures object and -llog to link lines, so its tail says whether the object
+	# was actually there.
+	tail_of_line="$(printf '%s' "$line" | rev | cut -c1-200 | rev)"
 	n="$(wc -l <"$PKG_DIR/cc.log" 2>/dev/null | tr -d ' ' || true)"
 	sym="?"
 	if [ -f "$PKG_DIR/cpu-features.o" ]; then
 		sym="$(llvm-nm --defined-only "$PKG_DIR/cpu-features.o" 2>/dev/null \
 			| grep -c android_getCpuFeatures || true)"
 	fi
-	printf 'node: error: make rc=%s, target=%s, %s invocations\n' \
-		"$rc" "${target##*/}" "${n:-0}" >&2
-	printf 'node: error: driver=%s object-on-line=%s cpu-features.o-symbols=%s\n' \
-		"${driver:-unknown}" "$obj" "$sym" >&2
-	printf 'node: error: line head: %.220s\n' "${line:-none}" >&2
+	printf 'node: error: make rc=%s, %s invocations, cpu-features.o defines %s\n' \
+		"$rc" "${n:-0}" "$sym" >&2
+	printf 'node: error: failed target=%s driver=%s\n' \
+		"${target##*/}" "${driver:-unknown}" >&2
+	printf 'node: error: line tail: %.220s\n' "${tail_of_line:-none}" >&2
 	printf 'node: error: first diagnostic: %.200s\n' "$(grep -a -m1 'error:' "$log" || true)" >&2
 	return 0
 }

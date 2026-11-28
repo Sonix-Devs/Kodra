@@ -114,9 +114,19 @@ build() {
 	# fails there, so this build does not fall back: an android configure that fails is a
 	# failure worth reading.
 	if ! node_configure configure-android.log; then
-		ci_error "node" "configure failed for --dest-os=android"
-		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
-			|| tail -n 10 configure-android.log >&2
+		# The last line of a Python failure is the exception, and the frames above it name
+		# the files involved: with a 700-character annotation budget, two frames and the
+		# exception say more than ten grepped lines. Paths are shortened for the same
+		# reason — the runner's absolute paths are 60 characters each.
+		local line
+		printf 'node: error: configure failed for --dest-os=android\n' >&2
+		while IFS= read -r line; do
+			printf 'node: error: frame %.170s\n' "$line" >&2
+		done < <(grep -a 'File "' configure-android.log | tail -n 2 \
+			| sed -e 's|^ *||' -e 's|/home/runner[^/]*/[^/]*/[^/]*/||' || true)
+		while IFS= read -r line; do
+			printf 'node: error: %.150s\n' "$line" >&2
+		done < <(tail -n 1 configure-android.log || true)
 		return 1
 	fi
 

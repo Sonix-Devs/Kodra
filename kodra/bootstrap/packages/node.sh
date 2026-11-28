@@ -60,23 +60,9 @@ build() {
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
 
-	# One translation unit through the wrapper, before a 4 000-file gyp target can fail
-	# somewhere inside a libc++ header. If this fails the wrapper or the headers are
-	# wrong and the flags gyp would have used are irrelevant; if it passes, the recorded
-	# argv of the failing object says what gyp added. Either way the diagnosis is one
-	# step, not a cascade.
-	printf '#include <memory>\nint main() { std::unique_ptr<int> p(new int(1)); return *p; }\n' \
-		>"$PKG_DIR/probe.cc"
-	if ! "$PKG_DIR/bin/node-cxx" -c "$PKG_DIR/probe.cc" -o "$PKG_DIR/probe.o" \
-		>"$PKG_DIR/probe.log" 2>&1; then
-		printf 'node: error: the target C++ wrapper cannot compile <memory>\n' >&2
-		printf 'node: error: wrapper: %.400s\n' "$(tail -n 1 "$PKG_DIR/bin/node-cxx")" >&2
-		while IFS= read -r line; do
-			printf 'node: error: %.300s\n' "$line" >&2
-		done < <(grep -a -m3 'error:' "$PKG_DIR/probe.log" || true)
+	if ! node_probe; then
 		return 1
 	fi
-	rm -f "$PKG_DIR/probe.cc" "$PKG_DIR/probe.o"
 
 	node_configure() {
 		local log="$1"
@@ -126,6 +112,29 @@ build() {
 		return 1
 	fi
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
+}
+
+# node_probe — one translation unit through the target C++ compiler, before a 4 000
+# file gyp target can fail somewhere inside a libc++ header. Three variants, because
+# they split the possible causes in one run: the wrapper with the package flags, the
+# toolchain wrapper alone with an explicit C++20, and the toolchain wrapper alone. If
+# only the first fails, the flags in this recipe are the cause; if the last ones fail
+# too, the toolchain or the headers are. Diagnostics stay short and last in the log:
+# the driver reports the tail of the log and the last five error lines, and long paths
+# push everything else out of both windows.
+node_probe() {
+	local src="$PKG_DIR/probe.cc" a=0 b=0 c=0
+	printf '#include <memory>\nint main() { std::unique_ptr<int> p(new int(1)); return *p; }\n' >"$src"
+	"$PKG_DIR/bin/node-cxx" -c "$src" -o "$PKG_DIR/probe-a.o" >"$PKG_DIR/probe-a.log" 2>&1 || a=$?
+	"$CXX" -std=gnu++20 -c "$src" -o "$PKG_DIR/probe-b.o" >"$PKG_DIR/probe-b.log" 2>&1 || b=$?
+	"$CXX" -c "$src" -o "$PKG_DIR/probe-c.o" >"$PKG_DIR/probe-c.log" 2>&1 || c=$?
+	printf 'node: error: <memory> probe flags=%s cxx20=%s bare=%s (0 is ok)\n' "$a" "$b" "$c" >&2
+	local line
+	while IFS= read -r line; do
+		printf 'node: error: %.160s\n' "$line" >&2
+	done < <(grep -a -m2 'error:' "$PKG_DIR/probe-a.log" | sed -e 's|.*/||' || true)
+	rm -f "$src" "$PKG_DIR"/probe-?
+	[ "$a" -eq 0 ]
 }
 
 # node_report_failure <log> — a compile error inside libc++ headers says nothing about

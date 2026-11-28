@@ -9,7 +9,15 @@ name: Kodra Bootstrap (bionic aarch64)
 # through kodra/bootstrap/lib/ci.sh, which emits annotations instead.
 
 on:
+  # `packages` exists to shorten the loop while porting: a dispatch with `node` runs
+  # the toolchain, the runtime and one package instead of all of them. Everything
+  # still builds by default, including on push and pull request.
   workflow_dispatch:
+    inputs:
+      packages:
+        description: Comma-separated packages to build
+        required: false
+        default: zlib,bash,git,node,node-pty
   push:
     branches:
       - main
@@ -257,6 +265,9 @@ jobs:
     name: Build bootstrap + smoke tests
     needs: probe
     runs-on: ubuntu-24.04-arm
+    env:
+      # inputs is empty outside workflow_dispatch, so the fallback is the full list.
+      KODRA_PACKAGES: ${{ inputs.packages || 'zlib,bash,git,node,node-pty' }}
     # Node's V8 and OpenSSL dominate this: on four ARM cores a from-source build of
     # 24.22.1 is roughly an hour, and a cold cache adds the downloads.
     timeout-minutes: 300
@@ -347,6 +358,7 @@ jobs:
       # Packages are built in dependency order, one step each, so a failure names the
       # package instead of the whole bootstrap.
       - name: Build zlib
+        if: contains(format(',{0},', env.KODRA_PACKAGES), ',zlib,')
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
@@ -361,6 +373,7 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/zlib.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build bash
+        if: contains(format(',{0},', env.KODRA_PACKAGES), ',bash,')
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
@@ -375,6 +388,7 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/bash.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build git
+        if: contains(format(',{0},', env.KODRA_PACKAGES), ',git,')
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
@@ -389,6 +403,7 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/git.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build node
+        if: contains(format(',{0},', env.KODRA_PACKAGES), ',node,')
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
@@ -403,6 +418,7 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/node.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build node-pty
+        if: contains(format(',{0},', env.KODRA_PACKAGES), ',node-pty,')
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh
@@ -417,6 +433,7 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/node-pty.log" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke tests inside the Android userland
+        if: env.KODRA_PACKAGES == 'zlib,bash,git,node,node-pty'
         run: |
           set -euo pipefail
           . kodra/bootstrap/lib/ci.sh

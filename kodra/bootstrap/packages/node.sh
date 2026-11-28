@@ -56,27 +56,24 @@ build() {
 		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
 	# Node's bundled zlib calls android_getCpuFeatures() whenever ARMV8_OS_ANDROID is
 	# defined, and gyp adds only the NDK's cpufeatures *include* directory, never an
-	# implementation: an Android build is expected to get the symbols from somewhere
-	# else. Compiling the NDK's own cpu-features.c and placing the object on the link
-	# line keeps that implementation inside the binary, with no assumption about what
-	# the platform's libandroid.so exports at this API level.
-	local cpu_features=""
-	if [ -f "$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c" ]; then
-		if ! "$PKG_DIR/bin/node-cc" -c "$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c" \
-			-o "$PKG_DIR/cpu-features.o" >"$PKG_DIR/cpu-features.log" 2>&1; then
-			printf 'node: error: cannot compile the NDK cpufeatures source\n' >&2
-			grep -a -m2 'error:' "$PKG_DIR/cpu-features.log" | sed -e 's|.*/||' >&2 || true
-			return 1
-		fi
-		cpu_features="$PKG_DIR/cpu-features.o"
+	# implementation: upstream expects the Android build to import the NDK's cpufeatures
+	# module. It is compiled here, from the NDK's own cpu-features.c, and placed on the
+	# link line — libandroid.so is not an option, since those symbols are private system
+	# API and were removed from it for API 29+.
+	NODE_CPU_FEATURES=""
+	if ! node_cpu_features; then
+		# One run should still reach the link, so the fallback is recorded rather than
+		# fatal: if the object cannot be built, -landroid is the remaining candidate.
+		printf 'node: error: falling back to -landroid for the cpufeatures symbols\n' >&2
+		NODE_CPU_FEATURES="-landroid"
 	fi
 	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
 	# C++20, so the last word on the command line has to be C++20. The cpufeatures object
-	# and its -llog belong to link lines only; adding them to compiles would draw
-	# 'linker input unused' warnings from every one of the 4 000 files.
+	# belongs to link lines only; on compiles it would draw 'linker input unused' from
+	# every one of the 1 600 objects.
 	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
-		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$cpu_features" >"$PKG_DIR/bin/node-cxx"
+		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$NODE_CPU_FEATURES" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
 
 	if ! node_probe; then
@@ -131,6 +128,34 @@ build() {
 		return 1
 	fi
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
+}
+
+# node_cpu_features — compile the NDK's cpufeatures implementation for the target and
+# leave the object in NODE_CPU_FEATURES. Two attempts, because the first failure of a
+# file this recipe has never compiled says little: the package wrapper with every
+# Android flag, then the toolchain wrapper alone, which is the combination the <memory>
+# probe showed to work on its own.
+node_cpu_features() {
+	local src="$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c"
+	local out="$PKG_DIR/cpu-features.o" a=1 b=1
+	if [ ! -f "$src" ]; then
+		printf 'node: error: no sources/android/cpufeatures/cpu-features.c in the NDK\n' >&2
+		return 1
+	fi
+	"$PKG_DIR/bin/node-cc" -c "$src" -o "$out" >"$PKG_DIR/cpu-features-a.log" 2>&1 || a=$?
+	if [ "$a" -ne 0 ]; then
+		"$CC" -std=gnu17 -O2 -c "$src" -o "$out" >"$PKG_DIR/cpu-features-b.log" 2>&1 || b=$?
+	fi
+	if [ "$a" -eq 0 ] || [ "$b" -eq 0 ]; then
+		NODE_CPU_FEATURES="$out"
+		return 0
+	fi
+	printf 'node: error: cpufeatures compile package=%s bare=%s (0 is ok)\n' "$a" "$b" >&2
+	local line
+	while IFS= read -r line; do
+		printf 'node: error: %.180s\n' "$line" >&2
+	done < <(grep -a -m2 -i 'error' "$PKG_DIR/cpu-features-a.log" | sed -e 's|.*/||' || true)
+	return 1
 }
 
 # node_probe — one translation unit through the target C++ compiler, before a 4 000

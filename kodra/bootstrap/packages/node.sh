@@ -96,9 +96,11 @@ build() {
 
 	grep -E '^(CC|CXX|dest_os|dest_cpu)' out/Makefile 2>/dev/null || true
 
+	# pipefail is set by the driver, so `make | tee` reports make's own status — but
+	# only if the failure is caught here; left bare it would trip set -e and abort the
+	# recipe before the failure is reported.
 	local rc=0
-	make -j"$(nproc)" 2>&1 | tee "$PKG_DIR/make.log"
-	rc=${PIPESTATUS[0]}
+	make -j"$(nproc)" 2>&1 | tee "$PKG_DIR/make.log" || rc=$?
 	if [ "$rc" -ne 0 ]; then
 		node_report_failure "$PKG_DIR/make.log"
 		return 1
@@ -106,23 +108,26 @@ build() {
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
 }
 
-# node_report_failure <log> — the compile command is nowhere in make's output, so on
-# failure we look up the argv the wrapper recorded for the first file that errored and
-# print what it was compiled with. Kept to three lines: only the tail of a package log
-# reaches the workflow annotation.
+# node_report_failure <log> — a compile error in libc++ headers says nothing about
+# the build, and make never echoes the command that produced it. The object make gave
+# up on is in its own error line, so look up the argv the wrapper recorded for that
+# object and report the two facts that decide header behaviour: the dialect gyp chose
+# and the target the compiler was told to build for. Emitted as annotations because
+# job logs are not readable from here (see lib/ci.sh).
 node_report_failure() {
-	local log="$1" obj base
-	obj="$(grep -a -m1 -oE '^[^ :]+\.(c|cc|cpp):[0-9]+:[0-9]+: error:' "$log" | cut -d: -f1)"
-	if [ -z "$obj" ]; then
-		return 0
+	local log="$1" obj cc_line std target first
+	# Every grep here may legitimately find nothing, and the driver runs this file under
+	# set -e: each one is guarded so a miss reports the next fact instead of aborting.
+	obj="$(grep -a -oE '[^ ]+\.o\] Error' "$log" | head -n 1 | sed 's/\] Error$//' || true)"
+	if [ -n "$obj" ] && [ -f "$PKG_DIR/cc.log" ]; then
+		cc_line="$(grep -a -F -- "$obj" "$PKG_DIR/cc.log" | tail -n 1 || true)"
+		std="$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*' | sort -u | tr '\n' ' ' || true)"
+		target="$(printf '%s' "$cc_line" | grep -o -- '--target=[^ ]*' | sort -u | tr '\n' ' ' || true)"
+		ci_error "node-compile" "$(basename "$obj") std=[$std] target=[$target]"
 	fi
-	base="$(basename "$obj")"
-	printf 'node: first error in %s\n' "$obj" >&2
-	if [ -f "$PKG_DIR/cc.log" ]; then
-		grep -a -F " $base " "$PKG_DIR/cc.log" | tail -n 1 >"$PKG_DIR/cc.last" || true
-		printf 'node: compiled with std=[%s] target=[%s]\n' \
-			"$(grep -ao -- '-std=[^ ]*' "$PKG_DIR/cc.last" | sort -u | tr '\n' ' ')" \
-			"$(grep -ao -- '--target=[^ ]*' "$PKG_DIR/cc.last" | sort -u | tr '\n' ' ')" >&2
+	first="$(grep -a -m1 'error:' "$log" || true)"
+	if [ -n "$first" ]; then
+		ci_error "node-first-error" "$(printf '%s' "$first" | cut -c1-400)"
 	fi
-	grep -a -m3 'error:' "$log" | cut -c1-240 >&2 || true
+	return 0
 }

@@ -44,6 +44,16 @@ build() {
 	# A cross build needs host tools (mksnapshot, torque) built for the host: on an
 	# aarch64 runner those are ordinary native builds, named explicitly so Node does not
 	# reuse the Android CC and produce binaries the runner cannot execute.
+	# The Android flags live in wrappers, not in the environment: node builds host tools
+	# (mksnapshot, torque) in the same tree, and an exported CFLAGS/LDFLAGS is inherited
+	# by those too — which linked a host binary with our Android --resource-dir and
+	# failed on -lgcc, and would have produced a host tool the runner cannot execute.
+	mkdir -p "$PKG_DIR/bin"
+	printf '#!/bin/sh\nexec %s %s -O2 "$@"\n' "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
+	printf '#!/bin/sh\nexec %s %s -O2 -fno-rtti %s "$@"\n' \
+		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
+	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
+
 	node_configure() {
 		local log="$1"
 		# Positional arguments are forwarded to gyp by configure ("pass the leftover
@@ -53,10 +63,7 @@ build() {
 		#     (one -I into the NDK's cpufeatures headers);
 		#   host_os, host_arch — v8.gyp branches on them for the host toolset, and nothing
 		#     in Node or gyp defines them for this build.
-		CC="$CC" CXX="$CXX" AR="$AR" \
-			CFLAGS="$ANDROID_CFLAGS -O2" \
-			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
-			LDFLAGS="$ANDROID_LDFLAGS" \
+		CC="$PKG_DIR/bin/node-cc" CXX="$PKG_DIR/bin/node-cxx" AR="$AR" \
 			CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" AR_host="$AR_host" \
 			./configure \
 			--prefix="$KODRA_PREFIX" \

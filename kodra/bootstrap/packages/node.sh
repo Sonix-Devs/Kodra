@@ -89,7 +89,11 @@ build() {
 		#     (one -I into the NDK's cpufeatures headers);
 		#   host_os, host_arch — v8.gyp branches on them for the host toolset, and nothing
 		#     in Node or gyp defines them for this build.
-		CC="$PKG_DIR/bin/node-cc" CXX="$PKG_DIR/bin/node-cxx" AR="$AR" \
+		# configure is Python, and this step runs with no LANG: without a UTF-8 locale its
+		# open() uses ASCII and reading a source file with any non-ASCII byte dies as a
+		# UnicodeDecodeError. PYTHONUTF8 covers interpreters too old to honour C.UTF-8.
+		LC_ALL=C.UTF-8 LANG=C.UTF-8 PYTHONUTF8=1 \
+			CC="$PKG_DIR/bin/node-cc" CXX="$PKG_DIR/bin/node-cxx" AR="$AR" \
 			CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" AR_host="$AR_host" \
 			./configure \
 			--prefix="$KODRA_PREFIX" \

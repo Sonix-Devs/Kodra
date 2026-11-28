@@ -293,6 +293,10 @@ install_one() {
 			| grep -av 'make\[[0-9]*\]: \*\*\*' | grep -av '^make: \*\*\*' \
 			| tail -n 5 | tr '\n' '~' | cut -c1-700)"
 		ci_error "build:$name" "failed. errors: ${errors:-none matched} | tail: $(tail -n 4 "$log_file" | tr '\n' '~' | cut -c1-400)"
+		# The single line above has a 700-character budget, which a recipe cannot always
+		# squeeze a diagnosis into. The tail goes out as its own annotations as well, so
+		# a few short lines are readable from an environment that cannot open job logs.
+		ci_annotate_tail "build:$name tail" "$log_file" 4
 		ci_summary "build:$name" "$log_file" 120
 		return 1
 	}

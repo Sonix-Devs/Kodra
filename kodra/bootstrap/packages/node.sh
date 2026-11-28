@@ -158,12 +158,15 @@ node_cpu_features() {
 	printf 'node: error: cpufeatures a=%s b=%s c=%s src=%sB\n' "$a" "$b" "$c" \
 		"$(wc -c <"$src" 2>/dev/null || echo '?')" >&2
 	local letter
+	# One line per attempt, published as its own annotation by the driver (it relays the
+	# tail of the log), so the budget is a few hundred characters rather than seventy.
+	printf 'node: error: CC=[%s] CXX=[%s]\n' "$CC" "$CXX" >&2
 	for letter in a b c; do
 		line=""
 		if [ -f "$PKG_DIR/cpu-features-$letter.log" ]; then
-			line="$(head -c 220 "$PKG_DIR/cpu-features-$letter.log" | tr '\n' ' ' || true)"
+			line="$(head -c 420 "$PKG_DIR/cpu-features-$letter.log" | tr '\n' ' ' || true)"
 		fi
-		printf 'node: error: %s: %.190s\n' "$letter" "${line:-empty}" >&2
+		printf 'node: error: attempt %s: %.400s\n' "$letter" "${line:-empty}" >&2
 	done
 	return 1
 }

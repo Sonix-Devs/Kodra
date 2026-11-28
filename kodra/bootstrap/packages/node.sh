@@ -136,31 +136,35 @@ build() {
 # the toolchain wrapper alone, the combination the <memory> probe showed to work.
 node_cpu_features() {
 	local src="$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c"
-	local out="$PKG_DIR/cpu-features.o" a=1 b=1 line
+	local out="$PKG_DIR/cpu-features.o" a=1 b=1 c=1 line
 	if [ ! -f "$src" ]; then
 		printf 'node: error: no sources/android/cpufeatures/cpu-features.c in the NDK\n' >&2
 		return 1
 	fi
+	# Three attempts: the package C wrapper, the toolchain C driver alone, then the C++
+	# driver alone, which is the combination the <memory> probe proved works.
 	"$PKG_DIR/bin/node-cc" -c "$src" -o "$out" >"$PKG_DIR/cpu-features-a.log" 2>&1 || a=$?
 	if [ "$a" -ne 0 ]; then
-		"$CC" -std=gnu17 -O2 -c "$src" -o "$out" >"$PKG_DIR/cpu-features-b.log" 2>&1 || b=$?
+		"$CC" -c "$src" -o "$out" >"$PKG_DIR/cpu-features-b.log" 2>&1 || b=$?
 	fi
-	if [ "$a" -eq 0 ] || [ "$b" -eq 0 ]; then
+	if [ "$a" -ne 0 ] && [ "$b" -ne 0 ]; then
+		"$CXX" -c "$src" -o "$out" >"$PKG_DIR/cpu-features-c.log" 2>&1 || c=$?
+	fi
+	if [ "$a" -eq 0 ] || [ "$b" -eq 0 ] || [ "$c" -eq 0 ]; then
 		return 0
 	fi
-	# Both attempts failed, so report what the logs actually hold rather than grepping
-	# them: an empty log with a non-zero status is itself the finding, and a grep for
-	# 'error' would hide it.
-	printf 'node: error: cpufeatures a=%s b=%s logs=%s+%sB src=%sB\n' "$a" "$b" \
-		"$(wc -c <"$PKG_DIR/cpu-features-a.log" 2>/dev/null || echo '?')" \
-		"$(wc -c <"$PKG_DIR/cpu-features-b.log" 2>/dev/null || echo '?')" \
+	# The head of each log, not the tail: clang puts the error first and the notes after,
+	# and the tail of a 300-byte log is all 'previous definition is here'.
+	printf 'node: error: cpufeatures a=%s b=%s c=%s src=%sB\n' "$a" "$b" "$c" \
 		"$(wc -c <"$src" 2>/dev/null || echo '?')" >&2
-	printf 'node: error: a said: %.150s\n' \
-		"$(tail -c 200 "$PKG_DIR/cpu-features-a.log" 2>/dev/null || true)" >&2
-	printf 'node: error: b said: %.150s\n' \
-		"$(tail -c 200 "$PKG_DIR/cpu-features-b.log" 2>/dev/null || true)" >&2
-	printf 'node: error: cc compile branch: %.150s\n' \
-		"$(sed -n '3p' "$PKG_DIR/bin/node-cc" 2>/dev/null || true)" >&2
+	local letter
+	for letter in a b c; do
+		line=""
+		if [ -f "$PKG_DIR/cpu-features-$letter.log" ]; then
+			line="$(head -c 220 "$PKG_DIR/cpu-features-$letter.log" | tr '\n' ' ' || true)"
+		fi
+		printf 'node: error: %s: %.190s\n' "$letter" "${line:-empty}" >&2
+	done
 	return 1
 }
 

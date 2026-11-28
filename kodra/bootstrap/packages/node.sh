@@ -76,6 +76,32 @@ build() {
 		return 1
 	fi
 
+	# The same problem exists one toolset over. deps/zlib/zlib.gyp defines
+	# ARMV8_OS_ANDROID for OS=="android" with no _toolset guard, so the host tools
+	# (mksnapshot, and anything else built for the runner) compile those zlib objects too
+	# and reference android_getCpuFeatures as well — which cannot come from the target
+	# object, since that is bionic. A stub is the right answer there: the value only
+	# selects CRC32/PMULL acceleration, and a host tool should take the generic path.
+	cat >"$PKG_DIR/cpu-features-host.c" <<'STUB'
+#include <stdint.h>
+uint64_t android_getCpuFeatures(void) { return 0; }
+uint32_t android_getCpuFamily(void) { return 0; }
+uint32_t android_getCpuCount(void) { return 1; }
+STUB
+	if ! "$CC_host" -O2 -c "$PKG_DIR/cpu-features-host.c" -o "$PKG_DIR/cpu-features-host.o" \
+		>"$PKG_DIR/cpu-features-host.log" 2>&1; then
+		printf 'node: error: cannot compile the host cpufeatures stub\n' >&2
+		head -c 300 "$PKG_DIR/cpu-features-host.log" >&2 || true
+		return 1
+	fi
+	printf '#!/bin/sh\nexec %s "$@" %s\n' "$CXX_host" "$PKG_DIR/cpu-features-host.o" \
+		>"$PKG_DIR/bin/link-host"
+	chmod +x "$PKG_DIR/bin/link-host"
+	# gyp takes LINK.host from this environment variable, and every host link goes
+	# through it, so the stub reaches mksnapshot without touching gyp files.
+	LINK_host="$PKG_DIR/bin/link-host"
+	export LINK_host
+
 	if ! node_probe; then
 		return 1
 	fi

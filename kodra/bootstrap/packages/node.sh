@@ -57,12 +57,12 @@ build() {
 	# draw 'linker input unused' from every one of the 1 600 objects. Both wrappers need
 	# the link branch, because gyp's LINK.target can resolve to either driver for a
 	# target built through the C compiler.
-	printf '#!/bin/sh\nprintf "cc %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -std=gnu17 -O2 "$@" ;;\nesac\nexec %s %s %s "$@" -llog %s\n' \
+	printf '#!/bin/sh\nprintf "cc %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*|*" -E "*) exec %s %s -std=gnu17 -O2 "$@" ;;\nesac\nexec %s %s %s "$@" -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" \
 		"$CC" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$PKG_DIR/cpu-features.o" >"$PKG_DIR/bin/node-cc"
 	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
 	# C++20, so the last word on the command line has to be C++20.
-	printf '#!/bin/sh\nprintf "cxx %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
+	printf '#!/bin/sh\nprintf "cxx %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*|*" -E "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
 		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$PKG_DIR/cpu-features.o" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
@@ -127,6 +127,15 @@ build() {
 		while IFS= read -r line; do
 			printf 'node: error: %.150s\n' "$line" >&2
 		done < <(tail -n 1 configure-android.log || true)
+		# to_utf8 decodes the stdout of a compiler-version probe, so when the failure is a
+		# decode error the useful fact is the bytes that probe produced. Run the same probe
+		# and show them.
+		printf '__clang__ __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__ __clang_major__ __clang_minor__ __clang_patchlevel__' \
+			| "$PKG_DIR/bin/node-cc" -E -P -x c - >"$PKG_DIR/cc-probe.out" 2>"$PKG_DIR/cc-probe.err" || true
+		printf 'node: error: cc probe out: %.110s\n' \
+			"$(od -An -c "$PKG_DIR/cc-probe.out" 2>/dev/null | tr -s ' ' | head -3 | tr '\n' ' ' || true)" >&2
+		printf 'node: error: cc probe err: %.110s\n' \
+			"$(head -c 110 "$PKG_DIR/cc-probe.err" 2>/dev/null | tr '\n' ' ' || true)" >&2
 		return 1
 	fi
 

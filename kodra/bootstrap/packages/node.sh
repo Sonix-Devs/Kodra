@@ -55,12 +55,8 @@ build() {
 	# module. It is compiled here, from the NDK's own cpu-features.c, and placed on the
 	# link line — libandroid.so is not an option, since those symbols are private system
 	# API and were removed from it for API 29+.
-	NODE_CPU_FEATURES=""
 	if ! node_cpu_features; then
-		# One run should still reach the link, so the fallback is recorded rather than
-		# fatal: if the object cannot be built, -landroid is the remaining candidate.
-		printf 'node: error: falling back to -landroid for the cpufeatures symbols\n' >&2
-		NODE_CPU_FEATURES="-landroid"
+		return 1
 	fi
 	# Both wrappers record their argv, tagged with which one ran: when a link fails,
 	# make does not echo the command, and 'was this linked by the C or the C++ driver'
@@ -72,12 +68,12 @@ build() {
 	# target built through the C compiler.
 	printf '#!/bin/sh\nprintf "cc %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -std=gnu17 -O2 "$@" ;;\nesac\nexec %s %s %s "$@" -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" \
-		"$CC" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$NODE_CPU_FEATURES" >"$PKG_DIR/bin/node-cc"
+		"$CC" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$PKG_DIR/cpu-features.o" >"$PKG_DIR/bin/node-cc"
 	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
 	# C++20, so the last word on the command line has to be C++20.
 	printf '#!/bin/sh\nprintf "cxx %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
-		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$NODE_CPU_FEATURES" >"$PKG_DIR/bin/node-cxx"
+		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$PKG_DIR/cpu-features.o" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
 
 	if ! node_probe; then
@@ -134,14 +130,13 @@ build() {
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
 }
 
-# node_cpu_features — compile the NDK's cpufeatures implementation for the target and
-# leave the object in NODE_CPU_FEATURES. Two attempts, because the first failure of a
-# file this recipe has never compiled says little: the package wrapper with every
-# Android flag, then the toolchain wrapper alone, which is the combination the <memory>
-# probe showed to work on its own.
+# node_cpu_features — compile the NDK's cpufeatures implementation for the target into
+# $PKG_DIR/cpu-features.o, which the wrappers put on every link line. Two attempts,
+# because a first failure says little: the package wrapper with every Android flag, then
+# the toolchain wrapper alone, the combination the <memory> probe showed to work.
 node_cpu_features() {
 	local src="$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c"
-	local out="$PKG_DIR/cpu-features.o" a=1 b=1
+	local out="$PKG_DIR/cpu-features.o" a=1 b=1 line
 	if [ ! -f "$src" ]; then
 		printf 'node: error: no sources/android/cpufeatures/cpu-features.c in the NDK\n' >&2
 		return 1
@@ -151,11 +146,9 @@ node_cpu_features() {
 		"$CC" -std=gnu17 -O2 -c "$src" -o "$out" >"$PKG_DIR/cpu-features-b.log" 2>&1 || b=$?
 	fi
 	if [ "$a" -eq 0 ] || [ "$b" -eq 0 ]; then
-		NODE_CPU_FEATURES="$out"
 		return 0
 	fi
 	printf 'node: error: cpufeatures compile package=%s bare=%s (0 is ok)\n' "$a" "$b" >&2
-	local line
 	while IFS= read -r line; do
 		printf 'node: error: %.180s\n' "$line" >&2
 	done < <(grep -a -m2 -i 'error' "$PKG_DIR/cpu-features-a.log" | sed -e 's|.*/||' || true)
@@ -226,5 +219,6 @@ node_report_failure() {
 		"${target##*/}" "${driver:-unknown}" >&2
 	printf 'node: error: line tail: %.220s\n' "${tail_of_line:-none}" >&2
 	printf 'node: error: first diagnostic: %.200s\n' "$(grep -a -m1 'error:' "$log" || true)" >&2
+	printf 'node: error: link branch: %.150s\n' "$(tail -n 1 "$PKG_DIR/bin/node-cxx" || true)" >&2
 	return 0
 }

@@ -94,7 +94,10 @@ STUB
 		head -c 300 "$PKG_DIR/cpu-features-host.log" >&2 || true
 		return 1
 	fi
-	printf '#!/bin/sh\nexec %s "$@" %s\n' "$CXX_host" "$PKG_DIR/cpu-features-host.o" \
+	# -latomic as well: V8's host objects use 16-byte atomics, and clang++ links libgcc,
+	# which has no __atomic_compare_exchange to offer — only libatomic does. On the
+	# Android side the same symbols come from compiler-rt, which --rtlib already selects.
+	printf '#!/bin/sh\nexec %s "$@" %s -latomic\n' "$CXX_host" "$PKG_DIR/cpu-features-host.o" \
 		>"$PKG_DIR/bin/link-host"
 	chmod +x "$PKG_DIR/bin/link-host"
 	# gyp takes LINK.host from this environment variable, and every host link goes

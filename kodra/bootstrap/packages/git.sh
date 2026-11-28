@@ -37,6 +37,9 @@ build() {
 	# and clock_gettime in libc and ships neither libpthread nor librt, so git's Linux
 	# defaults (-lpthread, -lrt) fail at link time.
 	#
+	# DESTDIR: git honours it exactly like an autotools package, so 'prefix' stays the
+	# device path and the files are staged under the root filesystem.
+	#
 	# SHELL_PATH: git's Makefile runs $(SHELL_PATH) -c while parsing and refuses to continue unless a
 	# modern shell answers. SHELL_PATH cannot point at the prefix during the build: the
 	# staged bash is an Android binary whose interpreter is /system/bin/linker64, so the
@@ -48,6 +51,7 @@ build() {
 		CFLAGS="$ANDROID_CFLAGS -O2 -I$KODRA_PREFIX/include" \
 		LDFLAGS="$ANDROID_LDFLAGS -L$KODRA_PREFIX/lib" \
 		prefix="$KODRA_PREFIX" \
+		DESTDIR="$KODRA_ROOTFS" \
 		gitexecdir="$KODRA_PREFIX/libexec/git-core" \
 		template_dir="$KODRA_PREFIX/share/git-core/templates" \
 		NO_GETTEXT=1 \

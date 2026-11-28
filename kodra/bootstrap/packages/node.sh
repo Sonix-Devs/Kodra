@@ -33,40 +33,40 @@ build() {
 	export LINK_host="${LINK_host:-clang++}"
 	export AR_host="${AR_host:-llvm-ar}"
 
-	# --dest-os=android exists in Node's configure; fall back to linux semantics
-	# (libuv and V8 treat bionic as Linux) if a future version drops it, and say
-	# which path was taken so the artifact is not ambiguous.
-	# configure's gyp failure prints the reason far above its last lines, so the output is
-	# captured and its tail reported: this log is the only copy that leaves the runner.
-	if ! ./configure \
-		--prefix="$KODRA_PREFIX" \
-		--dest-os=android \
-		--dest-cpu=arm64 \
-		--cross-compiling \
-		--with-intl=none \
-		--openssl-no-asm \
-		CC="$CC" CXX="$CXX" CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" \
-		CFLAGS="$ANDROID_CFLAGS -O2" \
-		CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
-		LDFLAGS="$ANDROID_LDFLAGS" \
-		>configure-android.log 2>&1; then
-		ci_error "node" "--dest-os=android configure failed"
-		# head, not tail: the first gyp/configure complaint is the informative one, and
-		# everything after it is consequence.
-		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
-			|| tail -n 10 configure-android.log >&2
-		ci_notice "node" "--dest-os=android rejected, retrying with --dest-os=linux"
-		./configure \
+	# Node's configure reads CC, CXX, CFLAGS, LDFLAGS and the CC_host family from the
+	# *environment*. Passing them as `VAR=value` arguments makes gyp read them as files
+	# to load ("gyp: CC_host=clang not found ... while trying to load CC_host=clang"),
+	# which is exactly how this failed twice.
+	#
+	# A cross build needs host tools (mksnapshot, torque) built for the host: on an
+	# aarch64 runner those are ordinary native builds, named explicitly so Node does not
+	# reuse the Android CC and produce binaries the runner cannot execute.
+	node_configure() {
+		local dest_os="$1" log="$2"
+		shift 2
+		CC="$CC" CXX="$CXX" AR="$AR" \
+			CFLAGS="$ANDROID_CFLAGS -O2 $*" \
+			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti $*" \
+			LDFLAGS="$ANDROID_LDFLAGS" \
+			CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" AR_host="$AR_host" \
+			./configure \
 			--prefix="$KODRA_PREFIX" \
-			--dest-os=linux \
+			--dest-os="$dest_os" \
 			--dest-cpu=arm64 \
 			--cross-compiling \
 			--with-intl=none \
-			--openssl-no-asm \
-			CC="$CC" CXX="$CXX" CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" \
-			CFLAGS="$ANDROID_CFLAGS -O2 -D__ANDROID__" \
-			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti -D__ANDROID__" \
-			LDFLAGS="$ANDROID_LDFLAGS" >configure-linux.log 2>&1 || {
+			--openssl-no-asm >"$log" 2>&1
+	}
+
+	# --dest-os=android states the target honestly; fall back to linux semantics (libuv
+	# and V8 treat bionic as Linux) if a future version drops it, and say which path was
+	# taken so the artifact is not ambiguous.
+	if ! node_configure android configure-android.log; then
+		ci_error "node" "--dest-os=android configure failed"
+		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
+			|| tail -n 10 configure-android.log >&2
+		ci_notice "node" "--dest-os=android rejected, retrying with --dest-os=linux"
+		node_configure linux configure-linux.log -D__ANDROID__ || {
 			ci_error "node" "--dest-os=linux configure failed"
 			grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-linux.log | head -n 10 >&2 \
 				|| tail -n 10 configure-linux.log >&2

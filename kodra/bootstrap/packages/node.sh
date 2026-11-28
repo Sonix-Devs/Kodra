@@ -148,15 +148,19 @@ node_cpu_features() {
 	if [ "$a" -eq 0 ] || [ "$b" -eq 0 ]; then
 		return 0
 	fi
-	printf 'node: error: cpufeatures compile package=%s bare=%s (0 is ok)\n' "$a" "$b" >&2
-	local from="$PKG_DIR/cpu-features-a.log"
-	[ "$a" -ne 0 ] && [ -f "$PKG_DIR/cpu-features-b.log" ] && from="$PKG_DIR/cpu-features-b.log"
-	while IFS= read -r line; do
-		printf 'node: error: %.170s\n' "$line" >&2
-	done < <(grep -a -m2 -iE 'error|fatal|cannot|no such|warning' "$from" | sed -e 's|.*/||' || true)
-	while IFS= read -r line; do
-		printf 'node: error: tail %.160s\n' "$line" >&2
-	done < <(tail -n 2 "$from" || true)
+	# Both attempts failed, so report what the logs actually hold rather than grepping
+	# them: an empty log with a non-zero status is itself the finding, and a grep for
+	# 'error' would hide it.
+	printf 'node: error: cpufeatures a=%s b=%s logs=%s+%sB src=%sB\n' "$a" "$b" \
+		"$(wc -c <"$PKG_DIR/cpu-features-a.log" 2>/dev/null || echo '?')" \
+		"$(wc -c <"$PKG_DIR/cpu-features-b.log" 2>/dev/null || echo '?')" \
+		"$(wc -c <"$src" 2>/dev/null || echo '?')" >&2
+	printf 'node: error: a said: %.150s\n' \
+		"$(tail -c 200 "$PKG_DIR/cpu-features-a.log" 2>/dev/null || true)" >&2
+	printf 'node: error: b said: %.150s\n' \
+		"$(tail -c 200 "$PKG_DIR/cpu-features-b.log" 2>/dev/null || true)" >&2
+	printf 'node: error: cc compile branch: %.150s\n' \
+		"$(sed -n '3p' "$PKG_DIR/bin/node-cc" 2>/dev/null || true)" >&2
 	return 1
 }
 

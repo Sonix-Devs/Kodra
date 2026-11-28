@@ -49,11 +49,6 @@ build() {
 	# by those too — which linked a host binary with our Android --resource-dir and
 	# failed on -lgcc, and would have produced a host tool the runner cannot execute.
 	mkdir -p "$PKG_DIR/bin"
-	# Each wrapper records its argv: when a compile fails, the language dialect gyp
-	# actually chose (-std=...) is the first thing worth knowing, and make does not
-	# echo the command anywhere readable after the fact.
-	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu17 -O2 "$@"\n' \
-		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
 	# Node's bundled zlib calls android_getCpuFeatures() whenever ARMV8_OS_ANDROID is
 	# defined, and gyp adds only the NDK's cpufeatures *include* directory, never an
 	# implementation: upstream expects the Android build to import the NDK's cpufeatures
@@ -67,11 +62,20 @@ build() {
 		printf 'node: error: falling back to -landroid for the cpufeatures symbols\n' >&2
 		NODE_CPU_FEATURES="-landroid"
 	fi
+	# Both wrappers record their argv, tagged with which one ran: when a link fails,
+	# make does not echo the command, and 'was this linked by the C or the C++ driver'
+	# is the difference between an object being on the command line and not.
+	#
+	# The cpufeatures object and -llog belong to link lines only; on compiles they would
+	# draw 'linker input unused' from every one of the 1 600 objects. Both wrappers need
+	# the link branch, because gyp's LINK.target can resolve to either driver for a
+	# target built through the C compiler.
+	printf '#!/bin/sh\nprintf "cc %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -std=gnu17 -O2 "$@" ;;\nesac\nexec %s %s %s "$@" -llog %s\n' \
+		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" \
+		"$CC" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$NODE_CPU_FEATURES" >"$PKG_DIR/bin/node-cc"
 	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
-	# C++20, so the last word on the command line has to be C++20. The cpufeatures object
-	# belongs to link lines only; on compiles it would draw 'linker input unused' from
-	# every one of the 1 600 objects.
-	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
+	# C++20, so the last word on the command line has to be C++20.
+	printf '#!/bin/sh\nprintf "cxx %%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
 		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$NODE_CPU_FEATURES" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
@@ -193,23 +197,32 @@ node_probe() {
 # annotation, so the text says 'error:' and stays short, and it prints five lines so
 # they fill that window instead of the compiler's cascades.
 node_report_failure() {
-	local log="$1" rc="$2" obj cc_line std target first n
-	obj="$(grep -a -oE '[^ ]+\.o\] Error' "$log" | head -n 1 | sed 's/\] Error$//' || true)"
-	cc_line=""
-	if [ -n "$obj" ] && [ -f "$PKG_DIR/cc.log" ]; then
-		cc_line="$(grep -a -F -- "$obj" "$PKG_DIR/cc.log" | tail -n 1 || true)"
+	local log="$1" rc="$2" target line driver obj sym n
+	# make names the rule that failed in square brackets: [<file>.mk:NN: <path>] Error N.
+	# The path is the object for a compile and the binary for a link, and either one can
+	# be looked up in the wrapper's log to recover the command that produced it.
+	target="$(grep -a -oE '\[[^]]+\] Error [0-9]+' "$log" | tail -n 1 \
+		| sed -e 's/\] Error [0-9]*$//' -e 's/^.*: //' || true)"
+	line=""
+	if [ -n "$target" ] && [ -f "$PKG_DIR/cc.log" ]; then
+		line="$(grep -a -F -- "$target" "$PKG_DIR/cc.log" | tail -n 1 || true)"
 	fi
-	std="$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*' | sort -u | tr '\n' ' ' || true)"
-	target="$(printf '%s' "$cc_line" | grep -o -- '--target=[^ ]*' | sort -u | tr '\n' ' ' || true)"
+	driver="$(printf '%s' "$line" | cut -d' ' -f1)"
+	case "$line" in
+	*cpu-features.o*) obj=yes ;;
+	*) obj=no ;;
+	esac
 	n="$(wc -l <"$PKG_DIR/cc.log" 2>/dev/null | tr -d ' ' || true)"
-	printf 'node: error: make rc=%s, %s compiler invocations recorded\n' \
-		"$rc" "${n:-0}" >&2
-	printf 'node: error: %s std=[%s] target=[%s]\n' \
-		"${obj##*/}" "${std:-none}" "${target:-none}" >&2
-	printf 'node: error: wrapper line for it: %.300s\n' \
-		"$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*\|-c \|-o [^ ]*' | tr '\n' ' ' || true)" >&2
-	first="$(grep -a -m1 'error:' "$log" || true)"
-	printf 'node: error: first diagnostic: %.260s\n' "${first:-none}" >&2
-	printf 'node: error: reported from node.sh after make, rc=%s\n' "$rc" >&2
+	sym="?"
+	if [ -f "$PKG_DIR/cpu-features.o" ]; then
+		sym="$(llvm-nm --defined-only "$PKG_DIR/cpu-features.o" 2>/dev/null \
+			| grep -c android_getCpuFeatures || true)"
+	fi
+	printf 'node: error: make rc=%s, target=%s, %s invocations\n' \
+		"$rc" "${target##*/}" "${n:-0}" >&2
+	printf 'node: error: driver=%s object-on-line=%s cpu-features.o-symbols=%s\n' \
+		"${driver:-unknown}" "$obj" "$sym" >&2
+	printf 'node: error: line head: %.220s\n' "${line:-none}" >&2
+	printf 'node: error: first diagnostic: %.200s\n' "$(grep -a -m1 'error:' "$log" || true)" >&2
 	return 0
 }

@@ -49,9 +49,13 @@ build() {
 	# by those too — which linked a host binary with our Android --resource-dir and
 	# failed on -lgcc, and would have produced a host tool the runner cannot execute.
 	mkdir -p "$PKG_DIR/bin"
-	printf '#!/bin/sh\nexec %s %s -O2 "$@"\n' "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
-	printf '#!/bin/sh\nexec %s %s -O2 -fno-rtti %s "$@"\n' \
-		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
+	# Each wrapper records its argv: when a compile fails, the language dialect gyp
+	# actually chose (-std=...) is the first thing worth knowing, and make does not
+	# echo the command anywhere readable after the fact.
+	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu17 -O2 "$@"\n' \
+		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
+	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu++20 -O2 -fno-rtti %s "$@"\n' \
+		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
 
 	node_configure() {
@@ -92,6 +96,33 @@ build() {
 
 	grep -E '^(CC|CXX|dest_os|dest_cpu)' out/Makefile 2>/dev/null || true
 
-	make -j"$(nproc)" || return 1
+	local rc=0
+	make -j"$(nproc)" 2>&1 | tee "$PKG_DIR/make.log"
+	rc=${PIPESTATUS[0]}
+	if [ "$rc" -ne 0 ]; then
+		node_report_failure "$PKG_DIR/make.log"
+		return 1
+	fi
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
+}
+
+# node_report_failure <log> — the compile command is nowhere in make's output, so on
+# failure we look up the argv the wrapper recorded for the first file that errored and
+# print what it was compiled with. Kept to three lines: only the tail of a package log
+# reaches the workflow annotation.
+node_report_failure() {
+	local log="$1" obj base
+	obj="$(grep -a -m1 -oE '^[^ :]+\.(c|cc|cpp):[0-9]+:[0-9]+: error:' "$log" | cut -d: -f1)"
+	if [ -z "$obj" ]; then
+		return 0
+	fi
+	base="$(basename "$obj")"
+	printf 'node: first error in %s\n' "$obj" >&2
+	if [ -f "$PKG_DIR/cc.log" ]; then
+		grep -a -F " $base " "$PKG_DIR/cc.log" | tail -n 1 >"$PKG_DIR/cc.last" || true
+		printf 'node: compiled with std=[%s] target=[%s]\n' \
+			"$(grep -ao -- '-std=[^ ]*' "$PKG_DIR/cc.last" | sort -u | tr '\n' ' ')" \
+			"$(grep -ao -- '--target=[^ ]*' "$PKG_DIR/cc.last" | sort -u | tr '\n' ' ')" >&2
+	fi
+	grep -a -m3 'error:' "$log" | cut -c1-240 >&2 || true
 }

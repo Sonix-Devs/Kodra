@@ -54,10 +54,29 @@ build() {
 	# echo the command anywhere readable after the fact.
 	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu17 -O2 "$@"\n' \
 		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
+	# Node's bundled zlib calls android_getCpuFeatures() whenever ARMV8_OS_ANDROID is
+	# defined, and gyp adds only the NDK's cpufeatures *include* directory, never an
+	# implementation: an Android build is expected to get the symbols from somewhere
+	# else. Compiling the NDK's own cpu-features.c and placing the object on the link
+	# line keeps that implementation inside the binary, with no assumption about what
+	# the platform's libandroid.so exports at this API level.
+	local cpu_features=""
+	if [ -f "$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c" ]; then
+		if ! "$PKG_DIR/bin/node-cc" -c "$ANDROID_NDK_ROOT/sources/android/cpufeatures/cpu-features.c" \
+			-o "$PKG_DIR/cpu-features.o" >"$PKG_DIR/cpu-features.log" 2>&1; then
+			printf 'node: error: cannot compile the NDK cpufeatures source\n' >&2
+			grep -a -m2 'error:' "$PKG_DIR/cpu-features.log" | sed -e 's|.*/||' >&2 || true
+			return 1
+		fi
+		cpu_features="$PKG_DIR/cpu-features.o"
+	fi
 	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
-	# C++20, so the last word on the command line has to be C++20.
-	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20\n' \
-		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
+	# C++20, so the last word on the command line has to be C++20. The cpufeatures object
+	# and its -llog belong to link lines only; adding them to compiles would draw
+	# 'linker input unused' warnings from every one of the 4 000 files.
+	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\ncase " $* " in\n*" -c "*) exec %s %s -O2 -fno-rtti "$@" -std=gnu++20 ;;\nesac\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20 -llog %s\n' \
+		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
+		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$cpu_features" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
 
 	if ! node_probe; then

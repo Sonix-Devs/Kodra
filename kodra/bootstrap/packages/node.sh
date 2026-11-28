@@ -54,9 +54,29 @@ build() {
 	# echo the command anywhere readable after the fact.
 	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu17 -O2 "$@"\n' \
 		"$PKG_DIR/cc.log" "$CC" "$ANDROID_CFLAGS" >"$PKG_DIR/bin/node-cc"
-	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -std=gnu++20 -O2 -fno-rtti %s "$@"\n' \
+	# -std goes after "$@": gyp appends its own flags to the wrapper's, and node 24 needs
+	# C++20, so the last word on the command line has to be C++20.
+	printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>%s\nexec %s %s -O2 -fno-rtti %s "$@" -std=gnu++20\n' \
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
+
+	# One translation unit through the wrapper, before a 4 000-file gyp target can fail
+	# somewhere inside a libc++ header. If this fails the wrapper or the headers are
+	# wrong and the flags gyp would have used are irrelevant; if it passes, the recorded
+	# argv of the failing object says what gyp added. Either way the diagnosis is one
+	# step, not a cascade.
+	printf '#include <memory>\nint main() { std::unique_ptr<int> p(new int(1)); return *p; }\n' \
+		>"$PKG_DIR/probe.cc"
+	if ! "$PKG_DIR/bin/node-cxx" -c "$PKG_DIR/probe.cc" -o "$PKG_DIR/probe.o" \
+		>"$PKG_DIR/probe.log" 2>&1; then
+		printf 'node: error: the target C++ wrapper cannot compile <memory>\n' >&2
+		printf 'node: error: wrapper: %.400s\n' "$(tail -n 1 "$PKG_DIR/bin/node-cxx")" >&2
+		while IFS= read -r line; do
+			printf 'node: error: %.300s\n' "$line" >&2
+		done < <(grep -a -m3 'error:' "$PKG_DIR/probe.log" || true)
+		return 1
+	fi
+	rm -f "$PKG_DIR/probe.cc" "$PKG_DIR/probe.o"
 
 	node_configure() {
 		local log="$1"
@@ -102,32 +122,41 @@ build() {
 	local rc=0
 	make -j"$(nproc)" 2>&1 | tee "$PKG_DIR/make.log" || rc=$?
 	if [ "$rc" -ne 0 ]; then
-		node_report_failure "$PKG_DIR/make.log"
+		node_report_failure "$PKG_DIR/make.log" "$rc"
 		return 1
 	fi
 	make install DESTDIR="$KODRA_ROOTFS" || return 1
 }
 
-# node_report_failure <log> — a compile error in libc++ headers says nothing about
-# the build, and make never echoes the command that produced it. The object make gave
-# up on is in its own error line, so look up the argv the wrapper recorded for that
-# object and report the two facts that decide header behaviour: the dialect gyp chose
-# and the target the compiler was told to build for. Emitted as annotations because
-# job logs are not readable from here (see lib/ci.sh).
+# node_report_failure <log> — a compile error inside libc++ headers says nothing about
+# the build, and make never echoes the command that produced it. The object make gave up
+# on is in its own error line, so the argv the wrapper recorded for that object can be
+# looked up, and with it the two facts that decide header behaviour: the dialect gyp
+# chose, and the target the compiler was told to build for.
+#
+# These lines are printed to the package log rather than through ci_error(): a recipe's
+# stderr is redirected into that log, so an ::error:: written here never reaches the
+# runner. The driver greps the log for 'error' lines in order to build its one
+# annotation, so the text says 'error:' and stays short, and it prints five lines so
+# they fill that window instead of the compiler's cascades.
 node_report_failure() {
-	local log="$1" obj cc_line std target first
-	# Every grep here may legitimately find nothing, and the driver runs this file under
-	# set -e: each one is guarded so a miss reports the next fact instead of aborting.
+	local log="$1" rc="$2" obj cc_line std target first n
 	obj="$(grep -a -oE '[^ ]+\.o\] Error' "$log" | head -n 1 | sed 's/\] Error$//' || true)"
+	cc_line=""
 	if [ -n "$obj" ] && [ -f "$PKG_DIR/cc.log" ]; then
 		cc_line="$(grep -a -F -- "$obj" "$PKG_DIR/cc.log" | tail -n 1 || true)"
-		std="$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*' | sort -u | tr '\n' ' ' || true)"
-		target="$(printf '%s' "$cc_line" | grep -o -- '--target=[^ ]*' | sort -u | tr '\n' ' ' || true)"
-		ci_error "node-compile" "$(basename "$obj") std=[$std] target=[$target]"
 	fi
+	std="$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*' | sort -u | tr '\n' ' ' || true)"
+	target="$(printf '%s' "$cc_line" | grep -o -- '--target=[^ ]*' | sort -u | tr '\n' ' ' || true)"
+	n="$(wc -l <"$PKG_DIR/cc.log" 2>/dev/null | tr -d ' ' || true)"
+	printf 'node: error: make rc=%s, %s compiler invocations recorded\n' \
+		"$rc" "${n:-0}" >&2
+	printf 'node: error: %s std=[%s] target=[%s]\n' \
+		"${obj##*/}" "${std:-none}" "${target:-none}" >&2
+	printf 'node: error: wrapper line for it: %.300s\n' \
+		"$(printf '%s' "$cc_line" | grep -o -- '-std=[^ ]*\|-c \|-o [^ ]*' | tr '\n' ' ' || true)" >&2
 	first="$(grep -a -m1 'error:' "$log" || true)"
-	if [ -n "$first" ]; then
-		ci_error "node-first-error" "$(printf '%s' "$first" | cut -c1-400)"
-	fi
+	printf 'node: error: first diagnostic: %.260s\n' "${first:-none}" >&2
+	printf 'node: error: reported from node.sh after make, rc=%s\n' "$rc" >&2
 	return 0
 }

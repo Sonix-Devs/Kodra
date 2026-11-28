@@ -49,15 +49,6 @@ build() {
 	# by those too — which linked a host binary with our Android --resource-dir and
 	# failed on -lgcc, and would have produced a host tool the runner cannot execute.
 	mkdir -p "$PKG_DIR/bin"
-	# Node's bundled zlib calls android_getCpuFeatures() whenever ARMV8_OS_ANDROID is
-	# defined, and gyp adds only the NDK's cpufeatures *include* directory, never an
-	# implementation: upstream expects the Android build to import the NDK's cpufeatures
-	# module. It is compiled here, from the NDK's own cpu-features.c, and placed on the
-	# link line — libandroid.so is not an option, since those symbols are private system
-	# API and were removed from it for API 29+.
-	if ! node_cpu_features; then
-		return 1
-	fi
 	# Both wrappers record their argv, tagged with which one ran: when a link fails,
 	# make does not echo the command, and 'was this linked by the C or the C++ driver'
 	# is the difference between an object being on the command line and not.
@@ -75,6 +66,15 @@ build() {
 		"$PKG_DIR/cc.log" "$CXX" "$ANDROID_CFLAGS" \
 		"$CXX" "$ANDROID_CFLAGS" "$ANDROID_LDFLAGS" "$PKG_DIR/cpu-features.o" >"$PKG_DIR/bin/node-cxx"
 	chmod +x "$PKG_DIR/bin/node-cc" "$PKG_DIR/bin/node-cxx"
+	# Node's bundled zlib calls android_getCpuFeatures() whenever ARMV8_OS_ANDROID is
+	# defined, and gyp adds only the NDK's cpufeatures *include* directory, never an
+	# implementation: upstream expects the Android build to import the NDK's cpufeatures
+	# module. It is compiled here, from the NDK's own cpu-features.c, and placed on the
+	# link line — libandroid.so is not an option, since those symbols are private system
+	# API and were removed from it for API 29+.
+	if ! node_cpu_features; then
+		return 1
+	fi
 
 	if ! node_probe; then
 		return 1
@@ -149,9 +149,14 @@ node_cpu_features() {
 		return 0
 	fi
 	printf 'node: error: cpufeatures compile package=%s bare=%s (0 is ok)\n' "$a" "$b" >&2
+	local from="$PKG_DIR/cpu-features-a.log"
+	[ "$a" -ne 0 ] && [ -f "$PKG_DIR/cpu-features-b.log" ] && from="$PKG_DIR/cpu-features-b.log"
 	while IFS= read -r line; do
-		printf 'node: error: %.180s\n' "$line" >&2
-	done < <(grep -a -m2 -i 'error' "$PKG_DIR/cpu-features-a.log" | sed -e 's|.*/||' || true)
+		printf 'node: error: %.170s\n' "$line" >&2
+	done < <(grep -a -m2 -iE 'error|fatal|cannot|no such|warning' "$from" | sed -e 's|.*/||' || true)
+	while IFS= read -r line; do
+		printf 'node: error: tail %.160s\n' "$line" >&2
+	done < <(tail -n 2 "$from" || true)
 	return 1
 }
 

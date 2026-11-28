@@ -51,7 +51,10 @@ build() {
 		LDFLAGS="$ANDROID_LDFLAGS" \
 		>configure-android.log 2>&1; then
 		ci_error "node" "--dest-os=android configure failed"
-		grep -aE '(Error|error|Traceback|gyp)' configure-android.log | tail -n 8 >&2 || tail -n 8 configure-android.log >&2
+		# head, not tail: the first gyp/configure complaint is the informative one, and
+		# everything after it is consequence.
+		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
+			|| tail -n 10 configure-android.log >&2
 		ci_notice "node" "--dest-os=android rejected, retrying with --dest-os=linux"
 		./configure \
 			--prefix="$KODRA_PREFIX" \
@@ -65,7 +68,8 @@ build() {
 			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti -D__ANDROID__" \
 			LDFLAGS="$ANDROID_LDFLAGS" >configure-linux.log 2>&1 || {
 			ci_error "node" "--dest-os=linux configure failed"
-			tail -n 10 configure-linux.log >&2
+			grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-linux.log | head -n 10 >&2 \
+				|| tail -n 10 configure-linux.log >&2
 			return 1
 		}
 	fi

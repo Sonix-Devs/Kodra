@@ -36,6 +36,8 @@ build() {
 	# --dest-os=android exists in Node's configure; fall back to linux semantics
 	# (libuv and V8 treat bionic as Linux) if a future version drops it, and say
 	# which path was taken so the artifact is not ambiguous.
+	# configure's gyp failure prints the reason far above its last lines, so the output is
+	# captured and its tail reported: this log is the only copy that leaves the runner.
 	if ! ./configure \
 		--prefix="$KODRA_PREFIX" \
 		--dest-os=android \
@@ -48,7 +50,8 @@ build() {
 		CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
 		LDFLAGS="$ANDROID_LDFLAGS" \
 		>configure-android.log 2>&1; then
-		cat configure-android.log
+		ci_error "node" "--dest-os=android configure failed"
+		grep -aE '(Error|error|Traceback|gyp)' configure-android.log | tail -n 8 >&2 || tail -n 8 configure-android.log >&2
 		ci_notice "node" "--dest-os=android rejected, retrying with --dest-os=linux"
 		./configure \
 			--prefix="$KODRA_PREFIX" \
@@ -60,7 +63,11 @@ build() {
 			CC="$CC" CXX="$CXX" CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" \
 			CFLAGS="$ANDROID_CFLAGS -O2 -D__ANDROID__" \
 			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti -D__ANDROID__" \
-			LDFLAGS="$ANDROID_LDFLAGS" || return 1
+			LDFLAGS="$ANDROID_LDFLAGS" >configure-linux.log 2>&1 || {
+			ci_error "node" "--dest-os=linux configure failed"
+			tail -n 10 configure-linux.log >&2
+			return 1
+		}
 	fi
 
 	grep -E '^(CC|CXX|dest_os|dest_cpu)' out/Makefile 2>/dev/null || true

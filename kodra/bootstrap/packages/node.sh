@@ -42,20 +42,25 @@ build() {
 	# aarch64 runner those are ordinary native builds, named explicitly so Node does not
 	# reuse the Android CC and produce binaries the runner cannot execute.
 	node_configure() {
-		local dest_os="$1" log="$2"
-		shift 2
+		local log="$1"
+		# Positional arguments are forwarded to gyp by configure ("pass the leftover
+		# non-whitespace positional arguments to GYP"), which is the only supported way to
+		# define a gyp variable that configure does not expose. Node's common.gypi requires
+		# android_ndk_path whenever OS=="android"; it is used for a single -I into the
+		# NDK's cpufeatures headers.
 		CC="$CC" CXX="$CXX" AR="$AR" \
-			CFLAGS="$ANDROID_CFLAGS -O2 $*" \
-			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti $*" \
+			CFLAGS="$ANDROID_CFLAGS -O2" \
+			CXXFLAGS="$ANDROID_CFLAGS -O2 -fno-rtti" \
 			LDFLAGS="$ANDROID_LDFLAGS" \
 			CC_host="$CC_host" CXX_host="$CXX_host" LINK_host="$LINK_host" AR_host="$AR_host" \
 			./configure \
 			--prefix="$KODRA_PREFIX" \
-			--dest-os="$dest_os" \
+			--dest-os=android \
 			--dest-cpu=arm64 \
 			--cross-compiling \
 			--with-intl=none \
-			--openssl-no-asm >"$log" 2>&1
+			--openssl-no-asm \
+			"-Dandroid_ndk_path=$ANDROID_NDK_ROOT" >"$log" 2>&1
 	}
 
 	# --dest-os=android is not cosmetic: it sets gyp's OS variable to "android", which is
@@ -64,7 +69,7 @@ build() {
 	# getservbyport_r. Falling back to --dest-os=linux compiles a libc-agnostic tree and
 	# fails there, so this build does not fall back: an android configure that fails is a
 	# failure worth reading.
-	if ! node_configure android configure-android.log; then
+	if ! node_configure configure-android.log; then
 		ci_error "node" "configure failed for --dest-os=android"
 		grep -aE '(gyp|GYP|Error|error|Traceback|Exception)' configure-android.log | head -n 10 >&2 \
 			|| tail -n 10 configure-android.log >&2

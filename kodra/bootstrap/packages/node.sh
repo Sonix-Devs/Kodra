@@ -250,7 +250,17 @@ node_report_failure() {
 	printf 'node: error: failed target=%s driver=%s\n' \
 		"${target##*/}" "${driver:-unknown}" >&2
 	printf 'node: error: line tail: %.220s\n' "${tail_of_line:-none}" >&2
-	printf 'node: error: first diagnostic: %.200s\n' "$(grep -a -m1 'error:' "$log" || true)" >&2
+	# A link failure reports itself as 'clang++: error: linker command failed'; the line
+	# that says why is the one just above it, from ld.lld, so take the first such block.
+	local ctx
+	while IFS= read -r line; do
+		printf 'node: error: above link failure: %.190s\n' "$line" >&2
+	done < <(grep -a -B3 -m1 'linker command failed' "$log" 2>/dev/null \
+		| sed -e 's|.*/||' -e 's|^--$||' || true)
+	while IFS= read -r line; do
+		printf 'node: error: link context: %.190s\n' "$line" >&2
+	done < <(grep -aE 'ld\.lld: error|undefined (symbol|reference)|cannot find -l' "$log" 2>/dev/null \
+		| tail -n 2 || true)
 	printf 'node: error: link branch: %.150s\n' "$(tail -n 1 "$PKG_DIR/bin/node-cxx" || true)" >&2
 	return 0
 }
